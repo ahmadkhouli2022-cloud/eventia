@@ -11,13 +11,19 @@ import com.codeicator.messages.Event;
 
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-@Component
 public abstract class Aggregate<T extends Aggregate.Domain> {
+
+    protected final DataPersistent<T> dataPersistent;
+
+    protected final EventPublisher eventPublisher;
+
+
+    public Aggregate(DataPersistent<T> persistent, EventPublisher publisher) {
+        this.dataPersistent = persistent;
+        this.eventPublisher = publisher;
+    }
 
     @SuperBuilder(toBuilder = true)
     @NoArgsConstructor
@@ -80,26 +86,7 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         return Mono.fromRunnable(() -> this.eventPublisher.publish(event));
     }
 
-    private DataPersistent<T> dataPersistent;
 
-    private EventPublisher eventPublisher;
 
-    @Lazy
-    @Autowired
-    public void setDataPersistent(DataPersistent<T> persistent) {
-        this.dataPersistent = persistent;
-    }
-
-    @Lazy
-    @Autowired
-    public void setEventPublisher(EventPublisher publisher) {
-        this.eventPublisher = publisher;
-    }
-
-    protected Aggregate(DataPersistent<T> persistent, EventPublisher publisher) {
-        this.dataPersistent = persistent;
-        this.eventPublisher = publisher;
-    }
-    protected Aggregate(){}
 
 }
