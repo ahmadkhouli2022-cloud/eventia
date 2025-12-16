@@ -6,24 +6,35 @@ import com.codeicator.messages.Command;
 import com.codeicator.messages.Event;
 import com.codeicator.messages.Reply;
 
-import jakarta.annotation.PostConstruct;
 
-import org.springframework.context.annotation.Configuration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
 
 import java.time.Duration;
+import java.util.UUID;
 
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-@Configuration
-@Slf4j
+
 public class ReactiveInmemoryBus extends Bus<Message>{
-    private final StreamBridge<Message> stream=new StreamBridge<>(Message.class);
+    private static final Logger log = LoggerFactory.getLogger(ReactiveInmemoryBus.class);
+
+    private ReactiveInmemoryBus(ApplicationContext context){
+        this.context=context;
+        stream=new StreamBridge<>(Message.class);
+    }
+    public static Bus<?> create(ApplicationContext context){
+        var bus= new ReactiveInmemoryBus(context);
+        bus.init();
+        return bus;
+    }
+
+    private final StreamBridge<Message> stream;
 
 
-    @PostConstruct
-    public void init(){
+    private void init(){
         try {
             super.registerHandlers();
             this.map(stream.getStream()).subscribe();
@@ -35,13 +46,16 @@ public class ReactiveInmemoryBus extends Bus<Message>{
 
         return flux
                 .handle((msg, sink) -> {
-                    var consumer = rpcMap.get(msg.getType());
-                    if (consumer != null) {
-                        consumer.accept(msg);
-                    }
-                    var handlers=handlersMap.get(msg.getType());
-                    if (handlers != null) {
-                        handlers.forEach(handler -> handler.Processor.accept(msg));
+                    if ("Reply".equals(msg.getCategory())) {
+                        var consumer = rpcMap.get(UUID.fromString(((Reply<?>)msg).getCorrelationId()));
+                        if (consumer != null) {
+                            consumer.accept((Reply<?>) msg);
+                        }
+                    }else {
+                        var handlers = handlersMap.get(msg.getType());
+                        if (handlers != null) {
+                            handlers.forEach(handler -> handler.Processor().accept(msg));
+                        }
                     }
                     sink.next(msg);
                 })
@@ -72,6 +86,17 @@ public class ReactiveInmemoryBus extends Bus<Message>{
     public Mono<Void> sendCommand(String destination,Mono<Command> command){
         return command.doOnNext(msg->this.publish(destination,msg)).then();
     }
+
+    @Override
+    public Mono<Reply<?>> sendRPCCommand(Command command) {
+        return rpc(rpcCommandBusDestination,command,Duration.ofSeconds(5));
+    }
+
+    @Override
+    public Mono<Reply<?>> sendRPCCommand(Command command, Duration timeToResponse) {
+        return rpc(rpcCommandBusDestination,command,timeToResponse);
+    }
+
     @Override
     public Mono<Void> raiseEvent(Mono<Event> event) {
         return event.doOnNext(msg->this.publish(this.eventBusDestination,msg)).then();
@@ -87,26 +112,24 @@ public class ReactiveInmemoryBus extends Bus<Message>{
 
 
     @Override
-    public Mono<Reply> sendRPCCommand(String destination,Mono<Command> command) {
-        return command.flatMap(msg->{
-            return rpc(destination,msg,Duration.ofSeconds(5));
+    public Mono<Reply<?>> sendRPCCommand(String destination, Command command) {
 
-        });
+            return rpc(destination,command,Duration.ofSeconds(5));
+
+
     }
     @Override
-    public Mono<Reply> sendRPCCommand(String destination,Mono<Command> command, Duration timeToResponse) {
-        return command.flatMap(msg->{
-            return rpc(destination,msg,timeToResponse);
+    public Mono<Reply<?>> sendRPCCommand(String destination,Command command, Duration timeToResponse) {
 
-        });
+            return rpc(destination,command,timeToResponse);
+
     }
-    private Mono<Reply> rpc(String destination,Command command, Duration timeToResponse){
-        return Mono.create(sink->{
+    private Mono<Reply<?>> rpc(String destination,Command command, Duration timeToResponse){
+        return Mono.<Reply<?>>create(sink->{
                     rpcMap.put(command.getId(), sink::success);
                     this.publish(destination,command);
                 })
                 .timeout(timeToResponse)
-                .cast(Reply.class)
                 .doFinally(s->rpcMap.remove(command.getId()));
     }
 

@@ -13,17 +13,17 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-
+@Component
 public abstract class Aggregate<T extends Aggregate.Domain> {
 
     @SuperBuilder(toBuilder = true)
     @NoArgsConstructor
     public abstract static class Domain {
         @JsonIgnore
-        protected final transient Lock lock=new ReentrantLock();
+        private final transient Lock lock=new ReentrantLock();
 
         @JsonIgnore
         private final transient List<Event> domainEvents = new ArrayList<>();
@@ -44,12 +44,12 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         List<Event> eventsToPublish=new ArrayList<>();
         T updatedDomain;
         try {
-            domain.lock.lock();
+            ((Domain) domain).lock.lock();
             updatedDomain= this.dataPersistent.persist(domain);
             eventsToPublish.addAll(((Domain) domain).domainEvents);
             ((Domain) domain).domainEvents.clear();
         }finally {
-            domain.lock.unlock();
+            ((Domain) domain).lock.unlock();
         }
         eventsToPublish.forEach(this.eventPublisher::publish);
         return Objects.requireNonNull(updatedDomain);
@@ -60,12 +60,12 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
             List<Event> eventsToPublish=new ArrayList<>();
             T updatedDomain;
             try {
-                domain.lock.lock();
+                ((Domain) domain).lock.lock();
                 updatedDomain= this.dataPersistent.persist(domain);
                 eventsToPublish.addAll(((Domain) domain).domainEvents);
                 ((Domain) domain).domainEvents.clear();
             }finally {
-                domain.lock.unlock();
+                ((Domain) domain).lock.unlock();
             }
             eventsToPublish.forEach(this.eventPublisher::publish);
             return Objects.requireNonNull(updatedDomain);
