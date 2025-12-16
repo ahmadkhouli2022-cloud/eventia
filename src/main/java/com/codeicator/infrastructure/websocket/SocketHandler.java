@@ -8,9 +8,7 @@ import com.codeicator.messages.websocket.Unsubscribe;
 import com.codeicator.messages.websocket.Completed;
 import com.codeicator.messages.websocket.Subscribed;
 import com.codeicator.messages.websocket.Unsubscribed;
-
 import lombok.NonNull;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
@@ -22,10 +20,18 @@ import reactor.util.function.Tuples;
 
 @Slf4j
 public class SocketHandler implements WebSocketHandler{
-    @Autowired
-    ObjectMapper mapper;
-    @Autowired
-    WebSocketRouter router;
+
+    private final ObjectMapper mapper;
+    private final WebSocketRouter router;
+
+    private SocketHandler(ObjectMapper mapper, WebSocketRouter router) {
+        this.mapper = mapper;
+        this.router = router;
+    }
+
+    public static SocketHandler create(ObjectMapper mapper, WebSocketRouter router){
+        return new SocketHandler(mapper,router);
+    }
 
     @Override
     @NonNull
@@ -37,7 +43,7 @@ public class SocketHandler implements WebSocketHandler{
             .map(this::extractType)
             .map(this::mapMessageToCommand)
             .flatMap(c->{
-                if (c.getType().equals(Unsubscribe.class.getName()))
+                if (c instanceof Unsubscribe)
                     return Mono.just(c);
 
                 if (client.getSubscribtions().containsKey(c.getId().toString())){
@@ -59,7 +65,7 @@ public class SocketHandler implements WebSocketHandler{
                     .subscriptionId(c.getUri()).build();
 
                 return session.send(messages
-                        .map(m1-> constructMessage(m1,session))
+                        .map(msg-> constructMessage(msg,session))
                         .startWith(constructMessage(subscribed, session))
                         .concatWithValues(constructMessage(completed, session)))
 

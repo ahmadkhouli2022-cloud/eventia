@@ -13,27 +13,24 @@ import com.codeicator.messages.Command;
 import com.codeicator.messages.Event;
 import com.codeicator.messages.Reply;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
 
-@Slf4j
 public abstract class Bus<T>{
 
 
-
-    @Autowired
-    private ApplicationContext context;
+    protected ApplicationContext context;
     @Value("${bus.command.destination:#{null}}")
     protected String commandBusDestination;
+    @Value("${bus.rpc.command.destination:#{null}}")
+    protected String rpcCommandBusDestination;
     @Value("${bus.event.destination:#{null}}")
     protected String eventBusDestination;
     protected final ConcurrentHashMap<String,List<Handler>> handlersMap=new ConcurrentHashMap<>();
-    protected final ConcurrentHashMap<UUID,Consumer<Object>> rpcMap=new ConcurrentHashMap<>();
+    protected final ConcurrentHashMap<UUID,Consumer<Reply<?>>> rpcMap=new ConcurrentHashMap<>();
     protected ObjectMapper objectMapper;
 
 
@@ -53,9 +50,9 @@ public abstract class Bus<T>{
             @SuppressWarnings("unchecked")
             Consumer<Object> func = (Consumer<Object>) handlerInstance;
 
-            var messageHandler = new Handler(func, annotation.messagType(), annotation.topic());
+            var messageHandler = new Handler(func, annotation.messageType(), annotation.topic());
 
-            handlersMap.computeIfAbsent(annotation.messagType().getName(), key -> new ArrayList<>())
+            handlersMap.computeIfAbsent(annotation.messageType().getName(), key -> new ArrayList<>())
                     .add(messageHandler);
         }
     }
@@ -72,8 +69,10 @@ public abstract class Bus<T>{
     public  abstract void sendCommand(String destination,Command command);
     public  abstract Mono<Void> sendCommand(Mono<Command> command);
     public  abstract Mono<Void> sendCommand(String destination,Mono<Command> command);
-    public  abstract Mono<Reply> sendRPCCommand(String destination,Mono<Command> command);
-    public  abstract Mono<Reply> sendRPCCommand(String destination,Mono<Command> command,Duration timeToResponse);
+    public  abstract Mono<Reply<?>> sendRPCCommand(Command command);
+    public  abstract Mono<Reply<?>> sendRPCCommand(Command command,Duration timeToResponse);
+    public  abstract Mono<Reply<?>> sendRPCCommand(String destination,Command command);
+    public  abstract Mono<Reply<?>> sendRPCCommand(String destination,Command command,Duration timeToResponse);
 
     public  abstract Mono<Void> raiseEvent(Mono<Event> event);
     public  abstract Mono<Void> raiseEvent(String destination,Mono<Event> event);
