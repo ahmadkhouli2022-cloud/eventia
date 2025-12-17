@@ -19,6 +19,13 @@ public abstract class Event extends Message{
     private final String correlationId;
     @JsonProperty("orderId")
     private final int orderId;
+    @JsonProperty("version")
+    @Builder.Default
+    private long version = 0;
     @Builder.Default
     protected final String category="Event";
+
+    public void setVersion(long version) {
+        this.version = version;
+    }
 }
