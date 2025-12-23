@@ -1,5 +1,7 @@
 package com.codeicator.domain;
 
+import com.codeicator.messages.Event;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,59 +59,22 @@ import java.util.List;
  */
 public class OutboxPublisher {
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisher.class);
-
-    /**
-     * Maximum number of retry attempts before moving to dead letter queue
-     */
     private static final int MAX_RETRIES = 3;
-
-    /**
-     * Maximum number of events to process in one polling cycle
-     */
     private static final int BATCH_SIZE = 100;
 
-    /**
-     * Storage for outbox events
-     */
     private final OutboxStore outboxStore;
-
-    /**
-     * Publisher for sending events to event bus
-     */
     private final EventPublisher eventPublisher;
+    private final ObjectMapper objectMapper; // ✅ Add ObjectMapper
 
-    /**
-     * Create new OutboxPublisher
-     * @param outboxStore the outbox storage implementation
-     * @param eventPublisher the event publisher (Spring Cloud Stream, Kafka, etc)
-     */
-    public OutboxPublisher(OutboxStore outboxStore, EventPublisher eventPublisher) {
+    public OutboxPublisher(
+        OutboxStore outboxStore,
+        EventPublisher eventPublisher,
+        ObjectMapper objectMapper) {  // ✅ Inject ObjectMapper
         this.outboxStore = outboxStore;
         this.eventPublisher = eventPublisher;
+        this.objectMapper = objectMapper;
     }
 
-    /**
-     * Poll and publish pending outbox events.
-     *
-     * Should be called regularly from a scheduled job:
-     * <pre>
-     * @Scheduled(fixedRate = 1000) // Every 1 second
-     * public void pollAndPublish() {
-     *     outboxPublisher.publishPending();
-     * }
-     * </pre>
-     *
-     * Polling rate recommendations:
-     * - High-throughput: 500-1000ms
-     * - Normal: 1-5 seconds
-     * - Low-throughput: 5-30 seconds
-     *
-     * Each call:
-     * 1. Fetches up to BATCH_SIZE unpublished events
-     * 2. Attempts to publish each event
-     * 3. Marks successful publishes
-     * 4. Retries or dead-letters failed events
-     */
     public void publishPending() {
         try {
             List<OutboxEvent> unpublished = outboxStore.getUnpublished(BATCH_SIZE);
@@ -126,30 +91,20 @@ public class OutboxPublisher {
             }
         } catch (Exception e) {
             log.error("Unexpected error during outbox publishing", e);
-            // Don't throw - allow next polling cycle to retry
         }
     }
 
-    /**
-     * Attempt to publish a single outbox event.
-     *
-     * Flow:
-     * 1. Try to publish event to event bus
-     * 2. If successful: mark as published
-     * 3. If failed:
-     *    a. If retries remaining: record failure (will retry next cycle)
-     *    b. If retries exhausted: move to dead letter queue
-     *
-     * @param outboxEvent the event to publish
-     */
     private void publishEvent(OutboxEvent outboxEvent) {
         try {
             log.debug("Publishing outbox event: {} (type: {})",
                 outboxEvent.getId(),
-                outboxEvent.getEvent().getClass().getSimpleName());
+                outboxEvent.getEventType());
 
-            // Publish to event bus (Spring Cloud Stream, Kafka, RabbitMQ, etc)
-            eventPublisher.publish(outboxEvent.getEvent());
+            // ✅ Deserialize event from JSON
+            Event event = outboxEvent.getEvent(objectMapper);
+
+            // Publish to event bus
+            eventPublisher.publish(event);
 
             // Mark as published in outbox store
             outboxStore.markAsPublished(outboxEvent.getId());
@@ -163,12 +118,6 @@ public class OutboxPublisher {
         }
     }
 
-    /**
-     * Handle failure of event publishing.
-     *
-     * @param outboxEvent the event that failed to publish
-     * @param exception the exception that occurred
-     */
     private void handlePublishFailure(OutboxEvent outboxEvent, Exception exception) {
         String reason = exception.getMessage() != null
             ? exception.getMessage()
@@ -178,22 +127,17 @@ public class OutboxPublisher {
             outboxEvent.getId(),
             reason);
 
-        // Check if we should retry
         if (outboxEvent.getRetryCount() >= MAX_RETRIES) {
             log.error("Max retries ({}) exceeded for outbox event {}. " +
-                "Moving to dead letter queue. Reason: {}",
+                    "Moving to dead letter queue. Reason: {}",
                 MAX_RETRIES,
                 outboxEvent.getId(),
                 reason);
 
             outboxStore.moveToDeadLetter(outboxEvent);
-
-            // Log for monitoring/alerting
             logDeadLetterEvent(outboxEvent, reason);
         } else {
-            // Record failure and will retry in next cycle
             outboxStore.recordFailure(outboxEvent.getId(), reason);
-
             log.info("Event {} queued for retry. Attempt {} of {}",
                 outboxEvent.getId(),
                 outboxEvent.getRetryCount() + 1,
@@ -201,34 +145,18 @@ public class OutboxPublisher {
         }
     }
 
-    /**
-     * Log dead letter event for monitoring and alerting.
-     * In production, this should send to monitoring system.
-     *
-     * @param event the dead lettered event
-     * @param reason why it failed
-     */
     private void logDeadLetterEvent(OutboxEvent event, String reason) {
         try {
             log.error("DEAD_LETTER: event_id={}, event_type={}, reason={}, age_ms={}",
                 event.getId(),
-                event.getEvent().getClass().getSimpleName(),
+                event.getEventType(),
                 reason,
                 event.getAgeMillis());
-
-            // TODO: Send to monitoring system (DataDog, Prometheus, etc)
-            // TODO: Create alert if too many events in DLQ
-            // TODO: Set up dashboard to monitor DLQ
         } catch (Exception e) {
             log.error("Failed to log dead letter event", e);
         }
     }
 
-    /**
-     * Get count of unpublished events (for monitoring).
-     *
-     * @return number of events waiting to be published
-     */
     public int getUnpublishedCount() {
         try {
             return outboxStore.getUnpublished(Integer.MAX_VALUE).size();
@@ -238,11 +166,6 @@ public class OutboxPublisher {
         }
     }
 
-    /**
-     * Get count of dead lettered events (for monitoring).
-     *
-     * @return number of events in dead letter queue
-     */
     public int getDeadLetterCount() {
         try {
             return outboxStore.getDeadLetterEvents().size();
@@ -252,4 +175,3 @@ public class OutboxPublisher {
         }
     }
 }
-

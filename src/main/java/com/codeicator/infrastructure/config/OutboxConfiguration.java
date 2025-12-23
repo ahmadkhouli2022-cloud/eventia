@@ -3,6 +3,7 @@ package com.codeicator.infrastructure.config;
 import com.codeicator.domain.EventPublisher;
 import com.codeicator.domain.OutboxPublisher;
 import com.codeicator.domain.OutboxStore;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,25 +37,20 @@ public class OutboxConfiguration {
      */
     @Bean
     public OutboxPublisher outboxPublisher(
-            OutboxStore outboxStore,
-            EventPublisher eventPublisher) {
+        OutboxStore outboxStore,
+        EventPublisher eventPublisher,
+        ObjectMapper objectMapper) {  // ✅ Inject ObjectMapper
 
         log.info("Creating OutboxPublisher bean");
-        return new OutboxPublisher(outboxStore, eventPublisher);
+        return new OutboxPublisher(outboxStore, eventPublisher, objectMapper);
     }
 
-    /**
-     * Create the polling job bean.
-     * Registers the scheduled task for processing outbox events.
-     *
-     * @param outboxPublisher the publisher to use
-     * @return polling job instance
-     */
     @Bean
     public OutboxPollingJob outboxPollingJob(OutboxPublisher outboxPublisher) {
         log.info("Creating OutboxPollingJob bean");
         return new OutboxPollingJob(outboxPublisher);
     }
+
 
     /**
      * Outbox event polling and processing job.
