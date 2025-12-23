@@ -25,7 +25,7 @@ public class ReactiveInmemoryBus extends Bus<Message>{
         this.context=context;
         stream=new StreamBridge<>(Message.class);
     }
-    public static Bus<?> create(ApplicationContext context){
+    public static Bus<Message> create(ApplicationContext context){
         var bus= new ReactiveInmemoryBus(context);
         bus.init();
         return bus;
@@ -54,7 +54,15 @@ public class ReactiveInmemoryBus extends Bus<Message>{
                     }else {
                         var handlers = handlersMap.get(msg.getType());
                         if (handlers != null) {
-                            handlers.forEach(handler -> handler.Processor().accept(msg));
+                            handlers.forEach(handler ->{
+                                try {
+                                    log.debug("Processing message of type {} with handler {}", msg.getType(), handler);
+                                    handler.Processor().accept(msg);
+
+                                } catch (Exception e) {
+                                    log.error("Error logging: handler "+handler.getClass()+ " message processing", e);
+                                }
+                            });
                         }
                     }
                     sink.next(msg);

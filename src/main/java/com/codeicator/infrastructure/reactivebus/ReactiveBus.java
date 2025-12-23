@@ -30,7 +30,7 @@ public class ReactiveBus extends Bus<org.springframework.messaging.Message<Strin
         objectMapper=new ObjectMapper();
     }
 
-    public static Bus<?> create(ApplicationContext context,StreamBridge streamBridge){
+    public static Bus<org.springframework.messaging.Message<String>> create(ApplicationContext context,StreamBridge streamBridge){
         var bus=new ReactiveBus(context,streamBridge);
         bus.init();
         return bus;
