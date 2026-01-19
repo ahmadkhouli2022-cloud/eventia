@@ -3,7 +3,7 @@
 [![Maven Central](https://img.shields.io/maven-central/v/com.codeicator/eventia-core.svg)](https://search.maven.org/artifact/com.codeicator/eventia-core)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Java Version](https://img.shields.io/badge/Java-17%2B-blue)](https://www.oracle.com/java/)
-[![Build Status](https://img.shields.io/github/workflow/status/yourusername/eventia/CI)](https://github.com/yourusername/eventia/actions)
+[![Build Status](https://img.shields.io/github/workflow/status/ahmadkhouli2022-cloud/eventia/CI)](https://github.com/ahmadkhouli2022-cloud/eventia/actions)
 
 **Eventia** is a lightweight, production-ready Java library for building reliable event-driven applications with guaranteed event delivery using the Outbox pattern.
 
