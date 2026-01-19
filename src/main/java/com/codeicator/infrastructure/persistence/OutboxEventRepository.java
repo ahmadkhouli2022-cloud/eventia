@@ -1,13 +1,16 @@
 package com.codeicator.infrastructure.persistence;
 
-import com.codeicator.domain.OutboxEvent;
+import com.codeicator.infrastructure.OutboxEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * JPA Repository for OutboxEvent persistence.
@@ -31,7 +34,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
         ORDER BY o.createdAt ASC
         LIMIT :limit
         """)
-    List<OutboxEvent> findUnpublished(int limit);
+    List<OutboxEvent> findUnpublished(@Param("limit") int limit);
 
     /**
      * Mark a single event as published.
@@ -43,7 +46,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
     @Modifying
     @Transactional
     @Query("UPDATE OutboxEvent o SET o.publishedAt = :publishedAt WHERE o.id = :id")
-    void markAsPublished(String id, long publishedAt);
+    void markAsPublished(@Param("id") UUID id, @Param("publishedAt") Instant publishedAt);
 
     /**
      * Record failure for an event and increment retry count.
@@ -60,7 +63,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
             o.failureReason = :reason
         WHERE o.id = :id
         """)
-    void recordFailure(String id, String reason);
+    void recordFailure(@Param("id") UUID id, @Param("reason") String reason);
 
     /**
      * Get all dead-lettered events.
@@ -99,7 +102,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
     @Modifying
     @Transactional
     @Query("DELETE FROM OutboxEvent o WHERE o.publishedAt < :olderThanMillis")
-    long deletePublishedBefore(long olderThanMillis);
+    long deletePublishedBefore(@Param("olderThanMillis") long olderThanMillis);
 
     /**
      * Mark an event as dead-lettered.
@@ -110,6 +113,6 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
     @Modifying
     @Transactional
     @Query("UPDATE OutboxEvent o SET o.deadLettered = TRUE WHERE o.id = :id")
-    void markAsDeadLettered(String id);
+    void markAsDeadLettered(@Param("id") UUID id);
 }
 

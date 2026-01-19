@@ -1,8 +1,10 @@
 package com.codeicator.infrastructure.config;
 
 import com.codeicator.domain.EventPublisher;
-import com.codeicator.domain.OutboxPublisher;
-import com.codeicator.domain.OutboxStore;
+import com.codeicator.infrastructure.OutboxPublisher;
+import com.codeicator.infrastructure.OutboxStore;
+import com.codeicator.infrastructure.reactivebus.Bus;
+import com.codeicator.messages.Message;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -32,17 +34,16 @@ public class OutboxConfiguration {
      * to the message bus with automatic retry and dead letter handling.
      *
      * @param outboxStore the outbox event storage
-     * @param eventPublisher the event bus publisher
      * @return configured OutboxPublisher
      */
     @Bean
     public OutboxPublisher outboxPublisher(
         OutboxStore outboxStore,
-        EventPublisher eventPublisher,
+        Bus<Message> bus,
         ObjectMapper objectMapper) {  // ✅ Inject ObjectMapper
 
         log.info("Creating OutboxPublisher bean");
-        return new OutboxPublisher(outboxStore, eventPublisher, objectMapper);
+        return new OutboxPublisher(outboxStore,  objectMapper,bus);
     }
 
     @Bean

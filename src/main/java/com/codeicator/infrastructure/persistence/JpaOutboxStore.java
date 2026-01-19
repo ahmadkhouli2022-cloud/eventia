@@ -1,13 +1,17 @@
 package com.codeicator.infrastructure.persistence;
 
-import com.codeicator.domain.OutboxEvent;
-import com.codeicator.domain.OutboxStore;
+import com.codeicator.infrastructure.OutboxEvent;
+import com.codeicator.infrastructure.OutboxStore;
+import com.codeicator.messages.Event;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * JPA implementation of OutboxStore.
@@ -23,6 +27,7 @@ import java.util.Objects;
 public class JpaOutboxStore implements OutboxStore {
 
     private final OutboxEventRepository repository;
+    private final ObjectMapper objectMapper=new ObjectMapper();
 
     public JpaOutboxStore(OutboxEventRepository repository) {
         this.repository = Objects.requireNonNull(repository,
@@ -81,10 +86,10 @@ public class JpaOutboxStore implements OutboxStore {
      */
     @Override
     @Transactional
-    public void markAsPublished(String eventId) {
+    public void markAsPublished(UUID eventId) {
         Objects.requireNonNull(eventId, "Event ID cannot be null");
 
-        repository.markAsPublished(eventId, System.currentTimeMillis());
+        repository.markAsPublished(eventId, Instant.now());
         log.debug("Marked event as published: {}", eventId);
     }
 
@@ -94,7 +99,7 @@ public class JpaOutboxStore implements OutboxStore {
      */
     @Override
     @Transactional
-    public void recordFailure(String eventId, String reason) {
+    public void recordFailure(UUID eventId, String reason) {
         Objects.requireNonNull(eventId, "Event ID cannot be null");
         Objects.requireNonNull(reason, "Failure reason cannot be null");
 

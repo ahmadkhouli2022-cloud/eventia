@@ -1,4 +1,4 @@
-package com.codeicator.domain;
+package com.codeicator.infrastructure;
 
 import com.codeicator.messages.Event;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -8,6 +8,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -21,8 +22,8 @@ public class OutboxEvent implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(name = "id", length = 36)
-    private String id;
+    @Column(name = "id")
+    private UUID id;
 
     /**
      * Type of the event (fully qualified class name)
@@ -39,10 +40,10 @@ public class OutboxEvent implements Serializable {
     private String eventPayload;
 
     @Column(name = "created_at", nullable = false)
-    private long createdAt;
+    private Instant createdAt;
 
     @Column(name = "published_at")
-    private Long publishedAt;
+    private Instant publishedAt;
 
     @Column(name = "retry_count", nullable = false)
     private int retryCount;
@@ -61,10 +62,10 @@ public class OutboxEvent implements Serializable {
     public static OutboxEvent from(Event event, ObjectMapper objectMapper) {
         try {
             return OutboxEvent.builder()
-                .id(UUID.randomUUID().toString())
+                .id(event.getId())
                 .eventType(event.getClass().getName())
                 .eventPayload(objectMapper.writeValueAsString(event))
-                .createdAt(System.currentTimeMillis())
+                .createdAt(event.getRaisedAt().toInstant())
                 .retryCount(0)
                 .deadLettered(false)
                 .build();
@@ -87,7 +88,7 @@ public class OutboxEvent implements Serializable {
     }
 
     public void markPublished() {
-        this.publishedAt = System.currentTimeMillis();
+        this.publishedAt = Instant.now();
     }
 
     public void recordFailure(String reason) {
@@ -107,6 +108,6 @@ public class OutboxEvent implements Serializable {
 
     @JsonIgnore
     public long getAgeMillis() {
-        return System.currentTimeMillis() - createdAt;
+        return Instant.now().minusMillis(createdAt.toEpochMilli()).toEpochMilli();
     }
 }

@@ -1,31 +1,27 @@
 package com.codeicator.infrastructure.persistence;
 
 import com.codeicator.domain.*;
+import com.codeicator.infrastructure.OutboxEvent;
 import com.codeicator.messages.Event;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
-@Service
 @Slf4j
-public class JpaDataPersistentWithOutbox<T extends Aggregate.Domain>
+public class JpaDataPersistentWithEventStore<T extends Aggregate.Domain>
     implements DataPersistent<T> {
 
     private final JpaRepository<T,?> aggregateRepository;
-    private final OutboxStore outboxStore;
     private final ObjectMapper objectMapper; // ✅ Add ObjectMapper
 
-    public JpaDataPersistentWithOutbox(
+    public JpaDataPersistentWithEventStore(
         JpaRepository<T,?> aggregateRepository,
-        OutboxStore outboxStore,
         ObjectMapper objectMapper) {  // ✅ Inject ObjectMapper
         this.aggregateRepository = Objects.requireNonNull(aggregateRepository);
-        this.outboxStore = Objects.requireNonNull(outboxStore);
         this.objectMapper = Objects.requireNonNull(objectMapper);
     }
 
@@ -55,7 +51,8 @@ public class JpaDataPersistentWithOutbox<T extends Aggregate.Domain>
                     .map(event -> OutboxEvent.from(event, objectMapper)) // ✅ Pass ObjectMapper
                     .collect(Collectors.toList());
 
-                outboxStore.saveAll(outboxEvents);
+//                outboxStore.saveAll(outboxEvents);
+                //TODO add event store logic
                 log.debug("Saved {} events to outbox", outboxEvents.size());
             }
 

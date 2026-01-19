@@ -1,31 +1,40 @@
 package com.codeicator.domain;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-
+import java.util.function.Consumer;
+import com.codeicator.infrastructure.reactivebus.DomainEventHandler;
+import com.codeicator.infrastructure.reactivebus.annotations.HandleDomainEvent;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.codeicator.messages.Event;
-
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 public abstract class Aggregate<T extends Aggregate.Domain> {
     private static final Logger log = LoggerFactory.getLogger(Aggregate.class);
 
-    protected final DataPersistent<T> dataPersistent;
+    @Getter    protected final DataPersistent<T> dataPersistent;
+    private static volatile boolean handlersInitialized = false;
 
 
-    public Aggregate(DataPersistent<T> persistent) {
+
+    public Aggregate(DataPersistent<T> persistent, ApplicationContext context) {
         this.dataPersistent = Objects.requireNonNull(persistent,
             "DataPersistent cannot be null");
-
+        this.context = context;
     }
+
 
     @SuperBuilder(toBuilder = true)
     @NoArgsConstructor
@@ -40,7 +49,7 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         private transient long version = 0;
 
         @JsonIgnore
-        protected final void raiseDomainEvent(Event event) {
+        public final void raiseDomainEvent(Event event) {
             try {
                 lock.lock();
                 event.setVersion(this.version);
@@ -101,21 +110,83 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         protected final Lock getLock() {
             return lock;
         }
+
+
+    }
+    private void ensureHandlersInitialized() {
+        if (!handlersInitialized) {
+            synchronized (this) {
+                if (!handlersInitialized) {
+                    try {
+                        this.registerHandlers();
+                    } catch (ClassNotFoundException | NoSuchMethodException e) {
+                        log.error("Failed to register domain event handlers: {}", e.toString());
+                    } finally {
+                        handlersInitialized = true; // Mark as initialized regardless to prevent retry loops
+                    }
+                }
+            }
+        }
+    }
+    @Getter
+    protected final ApplicationContext context;
+
+    @Getter
+    protected static final ConcurrentHashMap<String,List<DomainEventHandler>> handlersMap=new ConcurrentHashMap<>();
+
+    protected void registerHandlers() throws ClassNotFoundException, NoSuchMethodException {
+        var handlers = context.getBeansWithAnnotation(HandleDomainEvent.class);
+
+        for (var entry : handlers.entrySet()) {
+            Object handlerInstance = entry.getValue();
+            Class<?> handlerClass = handlerInstance.getClass();
+
+            String realClassName = handlerClass.getName().split("\\$")[0];
+            Class<?> realClass = getClass().getClassLoader().loadClass(realClassName);
+
+            Method method = realClass.getMethod(entry.getKey());
+            HandleDomainEvent annotation = method.getAnnotation(HandleDomainEvent.class);
+
+            @SuppressWarnings("unchecked")
+            Consumer<Object> func = (Consumer<Object>) handlerInstance;
+
+            var messageHandler = new DomainEventHandler(func, annotation.messageType());
+
+            getHandlersMap().computeIfAbsent(annotation.messageType().getName(), key -> new ArrayList<>())
+                .add(messageHandler);
+        }
     }
 
+
+    @Transactional
     public final T aggregate(T domain) {
         Objects.requireNonNull(domain, "Domain cannot be null");
-
+        ensureHandlersInitialized();
         T updatedDomain;
         try {
             domain.getLock().lock();
 
             // Just persist - outbox pattern handles event publishing
-            updatedDomain = this.dataPersistent.persist(domain);
+            updatedDomain = this.getDataPersistent().persist(domain);
+            log.debug("Successfully persist domain {} domain events",updatedDomain);
+
+            for (Event msg : domain.getUncommittedEvents()) {
+                var handlers = this.getHandlersMap().get(msg.getType());
+                if (handlers != null) {
+                    handlers.forEach(handler -> {
+                        try {
+                            log.debug("Processing event of type {} with handler {}", msg.getType(), handler);
+                            handler.Processor().accept(msg);
+
+                        } catch (Exception e) {
+                            log.error("Error logging: handler " + handler.getClass() + " event processing", e);
+                        }
+                    });
+                }
+            }
 
 
-
-            log.info("Successfully persisted domain with {} events to outbox",
+            log.debug("Successfully handle {} domain events",
                 domain.getUncommittedEvents().size());
 
             // Clear events after successful persist
@@ -128,15 +199,31 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         return Objects.requireNonNull(updatedDomain);
     }
 
+    @Transactional
     public final Mono<T> reactiveAggregate(T domain) {
         return Mono.fromSupplier(() -> {
             Objects.requireNonNull(domain, "Domain cannot be null");
+            ensureHandlersInitialized();
 
             T updatedDomain;
             try {
                 domain.getLock().lock();
-                updatedDomain = this.dataPersistent.persist(domain);
+                updatedDomain = this.getDataPersistent().persist(domain);
 
+                for (Event msg : domain.getUncommittedEvents()) {
+                    var handlers = this.getHandlersMap().get(msg.getType());
+                    if (handlers != null) {
+                        handlers.forEach(handler -> {
+                            try {
+                                log.debug("Processing message of type {} with handler {}", msg.getType(), handler);
+                                handler.Processor().accept(msg);
+
+                            } catch (Exception e) {
+                                log.error("Error logging: handler " + handler.getClass() + " message processing", e);
+                            }
+                        });
+                    }
+                }
                 domain.markEventsAsCommitted();
 
             } finally {
@@ -148,14 +235,6 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    protected final void markEventsPublished(Domain domain) {
-        try {
-            domain.getLock().lock();
-            domain.markEventsAsCommitted();
-        } finally {
-            domain.getLock().unlock();
-        }
-    }
 
 //    public final void raiseEvent(Event event) {
 //        try {

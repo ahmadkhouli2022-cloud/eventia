@@ -3,6 +3,7 @@ package com.codeicator.messages;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import java.util.Date;
 @Getter
@@ -19,13 +20,12 @@ public abstract class Event extends Message{
     private final String correlationId;
     @JsonProperty("orderId")
     private final int orderId;
-    @JsonProperty("version")
+    @Getter
+    @Setter
     @Builder.Default
-    private long version = 0;
+    @JsonProperty("version")
+    protected long version=1;
     @Builder.Default
     protected final String category="Event";
 
-    public void setVersion(long version) {
-        this.version = version;
-    }
 }

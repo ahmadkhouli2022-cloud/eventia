@@ -1,6 +1,10 @@
-package com.codeicator.domain;
+package com.codeicator.infrastructure;
 
+import com.codeicator.domain.EventPublisher;
+import com.codeicator.domain.EventPublishingException;
+import com.codeicator.infrastructure.reactivebus.Bus;
 import com.codeicator.messages.Event;
+import com.codeicator.messages.Message;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,22 +61,22 @@ import java.util.List;
  * @see OutboxStore
  * @see EventPublisher
  */
-public class OutboxPublisher {
+public class OutboxPublisher implements EventPublisher {
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisher.class);
     private static final int MAX_RETRIES = 3;
     private static final int BATCH_SIZE = 100;
 
     private final OutboxStore outboxStore;
-    private final EventPublisher eventPublisher;
     private final ObjectMapper objectMapper; // ✅ Add ObjectMapper
+
+    private final Bus<Message> bus;
 
     public OutboxPublisher(
         OutboxStore outboxStore,
-        EventPublisher eventPublisher,
-        ObjectMapper objectMapper) {  // ✅ Inject ObjectMapper
+        ObjectMapper objectMapper, Bus<Message> bus) {  // ✅ Inject ObjectMapper
         this.outboxStore = outboxStore;
-        this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
+        this.bus = bus;
     }
 
     public void publishPending() {
@@ -104,7 +108,7 @@ public class OutboxPublisher {
             Event event = outboxEvent.getEvent(objectMapper);
 
             // Publish to event bus
-            eventPublisher.publish(event);
+            bus.raiseEvent(event);
 
             // Mark as published in outbox store
             outboxStore.markAsPublished(outboxEvent.getId());
@@ -173,5 +177,11 @@ public class OutboxPublisher {
             log.error("Failed to get dead letter count", e);
             return -1;
         }
+    }
+
+    @Override
+    public void publish(Event event) throws EventPublishingException {
+        var envelop = OutboxEvent.from(event,objectMapper);
+        outboxStore.save(envelop);
     }
 }

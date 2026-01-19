@@ -1,6 +1,12 @@
-package com.codeicator.domain;
+package com.codeicator.infrastructure;
+
+import com.codeicator.messages.Event;
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Interface for storing and retrieving outbox events.
@@ -18,6 +24,7 @@ import java.util.List;
  * @see OutboxEvent
  * @see OutboxPublisher
  */
+@Service
 public interface OutboxStore {
 
     /**
@@ -36,6 +43,7 @@ public interface OutboxStore {
      *
      * @param events list of events to save
      */
+
     void saveAll(List<OutboxEvent> events);
 
     /**
@@ -56,7 +64,7 @@ public interface OutboxStore {
      *
      * @param eventId the ID of the event
      */
-    void markAsPublished(String eventId);
+    void markAsPublished(UUID eventId);
 
     /**
      * Record failure and increment retry count.
@@ -65,7 +73,7 @@ public interface OutboxStore {
      * @param eventId the ID of the event
      * @param reason the error message from failed publish
      */
-    void recordFailure(String eventId, String reason);
+    void recordFailure(UUID eventId, String reason);
 
     /**
      * Move event to dead letter queue.

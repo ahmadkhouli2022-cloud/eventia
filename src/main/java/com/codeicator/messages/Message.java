@@ -26,10 +26,6 @@ public abstract class Message implements Serializable{
     @JsonProperty("category")
     protected String category="Unspecified";
 
-    @Getter
-    @Builder.Default
-    @JsonProperty("version")
-    protected int version=1;
 
     public String getType(){
         return type==null? this.getClass().getName():this.type;
