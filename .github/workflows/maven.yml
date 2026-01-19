@@ -18,7 +18,11 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-
+    # Add permissions at the job level
+    permissions:
+      contents: write
+      pull-requests: write
+      
     steps:
     - uses: actions/checkout@v4
     - name: Set up JDK 21
