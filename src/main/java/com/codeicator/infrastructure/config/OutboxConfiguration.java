@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -44,15 +45,13 @@ public class OutboxConfiguration {
     private long retryBackoffMillis;
 
     /**
-     * Create OutboxPublisher bean.
+     * Create OutboxMetricsRecorder bean.
      *
-     * The publisher polls outbox table and publishes events
-     * to the message bus with automatic retry and dead letter handling.
-     *
-     * @param outboxStore the outbox event storage
-     * @return configured OutboxPublisher
+     * @param meterRegistry Micrometer registry used for metrics
+     * @return configured OutboxMetricsRecorder
      */
     @Bean
+    @ConditionalOnBean(MeterRegistry.class)
     public OutboxMetricsRecorder outboxMetricsRecorder(MeterRegistry meterRegistry) {
         return new MicrometerOutboxMetricsRecorder(meterRegistry);
     }

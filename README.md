@@ -28,7 +28,7 @@
 <dependency>
     <groupId>com.codeicator</groupId>
     <artifactId>eventia</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
