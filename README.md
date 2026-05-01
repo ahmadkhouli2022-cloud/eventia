@@ -111,16 +111,13 @@ public class OrderService {
 ### 4. Configure
 
 ```yaml
-eventia:
-  outbox:
-    enabled: true
-    polling-interval: 1000  # Poll every 1 second
-    max-retries: 3
-    batch-size: 100
-    cleanup:
-      enabled: true
-      schedule: "0 0 2 * * *"  # Daily at 2 AM
-      retention-days: 30
+outbox:
+  polling-interval: 1000  # Poll every 1 second
+  max-retries: 3
+  batch-size: 100
+  retry-backoff-ms: 1000
+  cleanup-schedule: "0 0 2 * * *"  # Daily at 2 AM
+  cleanup-retention-days: 30
 ```
 
 **That's it!** Eventia handles:

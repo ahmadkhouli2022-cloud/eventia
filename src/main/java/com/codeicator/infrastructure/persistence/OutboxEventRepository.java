@@ -29,12 +29,14 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
      * @return list of unpublished events in creation order
      */
     @Query(value = """
-        SELECT o FROM OutboxEvent o
-        WHERE o.publishedAt IS NULL AND o.deadLettered = FALSE
-        ORDER BY o.createdAt ASC
+        SELECT * FROM outbox_events
+        WHERE published_at IS NULL
+          AND dead_lettered = FALSE
+          AND (next_attempt_at IS NULL OR next_attempt_at <= :now)
+        ORDER BY created_at ASC
         LIMIT :limit
-        """)
-    List<OutboxEvent> findUnpublished(@Param("limit") int limit);
+        """, nativeQuery = true)
+    List<OutboxEvent> findUnpublished(@Param("limit") int limit, @Param("now") Instant now);
 
     /**
      * Mark a single event as published.
@@ -60,10 +62,14 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
     @Query("""
         UPDATE OutboxEvent o
         SET o.retryCount = o.retryCount + 1,
-            o.failureReason = :reason
+            o.failureReason = :reason,
+            o.nextAttemptAt = :nextAttemptAt
         WHERE o.id = :id
         """)
-    void recordFailure(@Param("id") UUID id, @Param("reason") String reason);
+    void recordFailure(
+        @Param("id") UUID id,
+        @Param("reason") String reason,
+        @Param("nextAttemptAt") Instant nextAttemptAt);
 
     /**
      * Get all dead-lettered events.

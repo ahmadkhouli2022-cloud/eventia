@@ -36,6 +36,9 @@ public class OutboxConfiguration {
     @Value("${outbox.cleanup-retention-days:30}")
     private long retentionDays;
 
+    @Value("${outbox.retry-backoff-ms:1000}")
+    private long retryBackoffMillis;
+
     /**
      * Create OutboxPublisher bean.
      *
@@ -52,7 +55,7 @@ public class OutboxConfiguration {
         ObjectMapper objectMapper) {
 
         log.info("Creating OutboxPublisher bean");
-        return new OutboxPublisher(outboxStore, objectMapper, bus, maxRetries, batchSize);
+        return new OutboxPublisher(outboxStore, objectMapper, bus, maxRetries, batchSize, retryBackoffMillis);
     }
 
     @Bean
@@ -149,4 +152,3 @@ public class OutboxConfiguration {
         log.info("  - Default batch size: 100");
     }
 }
-

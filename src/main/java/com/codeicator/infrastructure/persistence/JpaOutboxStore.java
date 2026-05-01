@@ -75,7 +75,7 @@ public class JpaOutboxStore implements OutboxStore {
             throw new IllegalArgumentException("Limit must be positive");
         }
 
-        List<OutboxEvent> unpublished = repository.findUnpublished(limit);
+        List<OutboxEvent> unpublished = repository.findUnpublished(limit, Instant.now());
         log.debug("Found {} unpublished events", unpublished.size());
         return unpublished;
     }
@@ -99,12 +99,13 @@ public class JpaOutboxStore implements OutboxStore {
      */
     @Override
     @Transactional
-    public void recordFailure(UUID eventId, String reason) {
+    public void recordFailure(UUID eventId, String reason, Instant nextAttemptAt) {
         Objects.requireNonNull(eventId, "Event ID cannot be null");
         Objects.requireNonNull(reason, "Failure reason cannot be null");
+        Objects.requireNonNull(nextAttemptAt, "Next attempt time cannot be null");
 
         try {
-            repository.recordFailure(eventId, reason);
+            repository.recordFailure(eventId, reason, nextAttemptAt);
             log.debug("Recorded failure for event {}: {}", eventId, reason);
         } catch (Exception e) {
             log.error("Failed to record failure for event {}", eventId, e);

@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -65,18 +66,20 @@ public class OutboxPublisher implements EventPublisher {
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisher.class);
     private static final int DEFAULT_MAX_RETRIES = 3;
     private static final int DEFAULT_BATCH_SIZE = 100;
+    private static final long DEFAULT_RETRY_BACKOFF_MILLIS = 1000L;
 
     private final OutboxStore outboxStore;
     private final ObjectMapper objectMapper;
     private final Bus<Message> bus;
     private final int maxRetries;
     private final int batchSize;
+    private final long retryBackoffMillis;
 
     public OutboxPublisher(
         OutboxStore outboxStore,
         ObjectMapper objectMapper,
         Bus<Message> bus) {
-        this(outboxStore, objectMapper, bus, DEFAULT_MAX_RETRIES, DEFAULT_BATCH_SIZE);
+        this(outboxStore, objectMapper, bus, DEFAULT_MAX_RETRIES, DEFAULT_BATCH_SIZE, DEFAULT_RETRY_BACKOFF_MILLIS);
     }
 
     public OutboxPublisher(
@@ -85,11 +88,22 @@ public class OutboxPublisher implements EventPublisher {
         Bus<Message> bus,
         int maxRetries,
         int batchSize) {
+        this(outboxStore, objectMapper, bus, maxRetries, batchSize, DEFAULT_RETRY_BACKOFF_MILLIS);
+    }
+
+    public OutboxPublisher(
+        OutboxStore outboxStore,
+        ObjectMapper objectMapper,
+        Bus<Message> bus,
+        int maxRetries,
+        int batchSize,
+        long retryBackoffMillis) {
         this.outboxStore = outboxStore;
         this.objectMapper = objectMapper;
         this.bus = bus;
         this.maxRetries = maxRetries;
         this.batchSize = batchSize;
+        this.retryBackoffMillis = retryBackoffMillis;
     }
 
     public void publishPending() {
@@ -154,9 +168,11 @@ public class OutboxPublisher implements EventPublisher {
             outboxStore.moveToDeadLetter(outboxEvent);
             logDeadLetterEvent(outboxEvent, reason);
         } else {
-            outboxStore.recordFailure(outboxEvent.getId(), reason);
-            log.info("Event {} queued for retry. Attempt {} of {}",
+            Instant nextAttemptAt = Instant.now().plusMillis(retryBackoffMillis);
+            outboxStore.recordFailure(outboxEvent.getId(), reason, nextAttemptAt);
+            log.info("Event {} queued for retry at {}. Attempt {} of {}",
                 outboxEvent.getId(),
+                nextAttemptAt,
                 outboxEvent.getRetryCount() + 1,
                 maxRetries);
         }
