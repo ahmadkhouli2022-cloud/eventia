@@ -1,10 +1,14 @@
 package com.codeicator.infrastructure.config;
 
+import com.codeicator.infrastructure.MicrometerOutboxMetricsRecorder;
+import com.codeicator.infrastructure.NoopOutboxMetricsRecorder;
+import com.codeicator.infrastructure.OutboxMetricsRecorder;
 import com.codeicator.infrastructure.OutboxPublisher;
 import com.codeicator.infrastructure.OutboxStore;
 import com.codeicator.infrastructure.reactivebus.Bus;
 import com.codeicator.messages.Message;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -49,13 +53,32 @@ public class OutboxConfiguration {
      * @return configured OutboxPublisher
      */
     @Bean
+    public OutboxMetricsRecorder outboxMetricsRecorder(MeterRegistry meterRegistry) {
+        return new MicrometerOutboxMetricsRecorder(meterRegistry);
+    }
+
+    @Bean
+    public OutboxMetricsRecorder fallbackOutboxMetricsRecorder() {
+        return new NoopOutboxMetricsRecorder();
+    }
+
+    @Bean
     public OutboxPublisher outboxPublisher(
         OutboxStore outboxStore,
         Bus<Message> bus,
-        ObjectMapper objectMapper) {
+        ObjectMapper objectMapper,
+        OutboxMetricsRecorder outboxMetricsRecorder) {
 
         log.info("Creating OutboxPublisher bean");
-        return new OutboxPublisher(outboxStore, objectMapper, bus, maxRetries, batchSize, retryBackoffMillis);
+        return new OutboxPublisher(
+            outboxStore,
+            objectMapper,
+            bus,
+            maxRetries,
+            batchSize,
+            retryBackoffMillis,
+            outboxMetricsRecorder
+        );
     }
 
     @Bean

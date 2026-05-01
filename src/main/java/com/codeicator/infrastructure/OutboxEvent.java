@@ -59,6 +59,9 @@ public class OutboxEvent implements Serializable {
     @Column(name = "next_attempt_at")
     private Instant nextAttemptAt;
 
+    @Column(name = "schema_version", nullable = false)
+    private int schemaVersion;
+
     /**
      * Factory method to create outbox event from domain event
      */
@@ -68,6 +71,7 @@ public class OutboxEvent implements Serializable {
                 .id(event.getId())
                 .eventType(event.getClass().getName())
                 .eventPayload(objectMapper.writeValueAsString(event))
+                .schemaVersion(event.getSchemaVersion())
                 .createdAt(event.getRaisedAt().toInstant())
                 .retryCount(0)
                 .deadLettered(false)

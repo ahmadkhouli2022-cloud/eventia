@@ -27,5 +27,8 @@ public abstract class Event extends Message{
     protected long version=1;
     @Builder.Default
     protected final String category="Event";
+    @JsonProperty("schemaVersion")
+    @Builder.Default
+    private final int schemaVersion = 1;
 
 }

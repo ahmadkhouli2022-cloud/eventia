@@ -120,4 +120,27 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
     @Transactional
     @Query("UPDATE OutboxEvent o SET o.deadLettered = TRUE WHERE o.id = :id")
     void markAsDeadLettered(@Param("id") UUID id);
+
+    @Query(value = """
+        SELECT * FROM outbox_events
+        WHERE dead_lettered = TRUE
+        ORDER BY created_at ASC
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<OutboxEvent> findDeadLettered(@Param("limit") int limit);
+
+    @Query(value = """
+        SELECT * FROM outbox_events
+        WHERE dead_lettered = TRUE
+          AND created_at BETWEEN :from AND :to
+        ORDER BY created_at ASC
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<OutboxEvent> findDeadLetteredBetween(
+        @Param("from") Instant from,
+        @Param("to") Instant to,
+        @Param("limit") int limit);
+
+    @Query("SELECT o FROM OutboxEvent o WHERE o.id IN :ids AND o.deadLettered = TRUE")
+    List<OutboxEvent> findDeadLetteredByIds(@Param("ids") List<UUID> ids);
 }

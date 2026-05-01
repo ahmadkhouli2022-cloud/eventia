@@ -46,11 +46,17 @@ class OutboxPublisherIntegrationTest {
         }
 
         @Bean
+        OutboxMetricsRecorder outboxMetricsRecorder() {
+            return new NoopOutboxMetricsRecorder();
+        }
+
+        @Bean
         OutboxPublisher outboxPublisher(
             OutboxStore outboxStore,
             ObjectMapper objectMapper,
-            Bus<Message> bus) {
-            return new OutboxPublisher(outboxStore, objectMapper, bus, 3, 50, 200);
+            Bus<Message> bus,
+            OutboxMetricsRecorder outboxMetricsRecorder) {
+            return new OutboxPublisher(outboxStore, objectMapper, bus, 3, 50, 200, outboxMetricsRecorder);
         }
     }
 

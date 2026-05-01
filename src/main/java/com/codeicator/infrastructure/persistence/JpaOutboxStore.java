@@ -140,6 +140,45 @@ public class JpaOutboxStore implements OutboxStore {
         return deadLettered;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<OutboxEvent> getDeadLetterEvents(int limit) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Limit must be positive");
+        }
+
+        List<OutboxEvent> deadLettered = repository.findDeadLettered(limit);
+        log.debug("Found {} dead-lettered events", deadLettered.size());
+        return deadLettered;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OutboxEvent> getDeadLetterEventsBetween(Instant from, Instant to, int limit) {
+        Objects.requireNonNull(from, "From timestamp cannot be null");
+        Objects.requireNonNull(to, "To timestamp cannot be null");
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Limit must be positive");
+        }
+
+        List<OutboxEvent> deadLettered = repository.findDeadLetteredBetween(from, to, limit);
+        log.debug("Found {} dead-lettered events between {} and {}", deadLettered.size(), from, to);
+        return deadLettered;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OutboxEvent> getDeadLetterEventsByIds(List<UUID> ids) {
+        Objects.requireNonNull(ids, "Ids cannot be null");
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+
+        List<OutboxEvent> deadLettered = repository.findDeadLetteredByIds(ids);
+        log.debug("Found {} dead-lettered events by ids", deadLettered.size());
+        return deadLettered;
+    }
+
     /**
      * Get a single event by ID.
      * {@inheritDoc}

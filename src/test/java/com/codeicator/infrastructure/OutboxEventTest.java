@@ -35,5 +35,6 @@ class OutboxEventTest {
         assertEquals(event.getStreamType(), restored.getStreamType());
         assertEquals(event.getCorrelationId(), restored.getCorrelationId());
         assertEquals(event.getOrderId(), restored.getOrderId());
+        assertEquals(event.getSchemaVersion(), outboxEvent.getSchemaVersion());
     }
 }

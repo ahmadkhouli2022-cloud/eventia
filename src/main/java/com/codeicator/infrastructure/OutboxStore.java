@@ -93,6 +93,12 @@ public interface OutboxStore {
      */
     List<OutboxEvent> getDeadLetterEvents();
 
+    List<OutboxEvent> getDeadLetterEvents(int limit);
+
+    List<OutboxEvent> getDeadLetterEventsBetween(Instant from, Instant to, int limit);
+
+    List<OutboxEvent> getDeadLetterEventsByIds(List<UUID> ids);
+
     /**
      * Get a single event by ID.
      * Used for debugging and recovery operations.
