@@ -99,7 +99,7 @@ public interface OutboxStore {
      * @param eventId the event ID
      * @return the event if found
      */
-    OutboxEvent findById(String eventId);
+    OutboxEvent findById(UUID eventId);
 
     /**
      * Clean up old published events.
@@ -115,4 +115,3 @@ public interface OutboxStore {
      */
     long deletePublishedBefore(long olderThanMillis);
 }
-

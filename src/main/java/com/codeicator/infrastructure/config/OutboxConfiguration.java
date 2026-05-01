@@ -1,12 +1,12 @@
 package com.codeicator.infrastructure.config;
 
-import com.codeicator.domain.EventPublisher;
 import com.codeicator.infrastructure.OutboxPublisher;
 import com.codeicator.infrastructure.OutboxStore;
 import com.codeicator.infrastructure.reactivebus.Bus;
 import com.codeicator.messages.Message;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -27,6 +27,15 @@ import org.springframework.scheduling.annotation.Scheduled;
 @Slf4j
 public class OutboxConfiguration {
 
+    @Value("${outbox.max-retries:3}")
+    private int maxRetries;
+
+    @Value("${outbox.batch-size:100}")
+    private int batchSize;
+
+    @Value("${outbox.cleanup-retention-days:30}")
+    private long retentionDays;
+
     /**
      * Create OutboxPublisher bean.
      *
@@ -40,16 +49,18 @@ public class OutboxConfiguration {
     public OutboxPublisher outboxPublisher(
         OutboxStore outboxStore,
         Bus<Message> bus,
-        ObjectMapper objectMapper) {  // ✅ Inject ObjectMapper
+        ObjectMapper objectMapper) {
 
         log.info("Creating OutboxPublisher bean");
-        return new OutboxPublisher(outboxStore,  objectMapper,bus);
+        return new OutboxPublisher(outboxStore, objectMapper, bus, maxRetries, batchSize);
     }
 
     @Bean
-    public OutboxPollingJob outboxPollingJob(OutboxPublisher outboxPublisher) {
+    public OutboxPollingJob outboxPollingJob(
+        OutboxPublisher outboxPublisher,
+        OutboxStore outboxStore) {
         log.info("Creating OutboxPollingJob bean");
-        return new OutboxPollingJob(outboxPublisher);
+        return new OutboxPollingJob(outboxPublisher, outboxStore, retentionDays);
     }
 
 
@@ -71,9 +82,16 @@ public class OutboxConfiguration {
     public static class OutboxPollingJob {
 
         private final OutboxPublisher outboxPublisher;
+        private final OutboxStore outboxStore;
+        private final long retentionDays;
 
-        public OutboxPollingJob(OutboxPublisher outboxPublisher) {
+        public OutboxPollingJob(
+            OutboxPublisher outboxPublisher,
+            OutboxStore outboxStore,
+            long retentionDays) {
             this.outboxPublisher = outboxPublisher;
+            this.outboxStore = outboxStore;
+            this.retentionDays = retentionDays;
         }
 
         /**
@@ -106,17 +124,11 @@ public class OutboxConfiguration {
         @Scheduled(cron = "${outbox.cleanup-schedule:0 0 2 * * *}")
         public void cleanupOldPublishedEvents() {
             try {
-                long retentionDays = Long.parseLong(
-                    System.getProperty("outbox.cleanup-retention-days", "30"));
-
-                long thirtyDaysAgo = System.currentTimeMillis() -
+                long thresholdMillis = System.currentTimeMillis() -
                     (retentionDays * 24 * 60 * 60 * 1000);
 
-                // Note: OutboxPublisher needs access to OutboxStore
-                // This is a placeholder - implement in OutboxPublisher or OutboxStore
-                log.info("Cleanup of published events scheduled " +
-                    "(needs OutboxStore access - implement in OutboxPublisher)");
-
+                long deleted = outboxStore.deletePublishedBefore(thresholdMillis);
+                log.info("Deleted {} published outbox events older than {} days", deleted, retentionDays);
             } catch (Exception e) {
                 log.error("Error during cleanup of old published events", e);
                 // Don't throw - allow next cycle

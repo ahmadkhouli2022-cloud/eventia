@@ -63,25 +63,38 @@ import java.util.List;
  */
 public class OutboxPublisher implements EventPublisher {
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisher.class);
-    private static final int MAX_RETRIES = 3;
-    private static final int BATCH_SIZE = 100;
+    private static final int DEFAULT_MAX_RETRIES = 3;
+    private static final int DEFAULT_BATCH_SIZE = 100;
 
     private final OutboxStore outboxStore;
-    private final ObjectMapper objectMapper; // ✅ Add ObjectMapper
-
+    private final ObjectMapper objectMapper;
     private final Bus<Message> bus;
+    private final int maxRetries;
+    private final int batchSize;
 
     public OutboxPublisher(
         OutboxStore outboxStore,
-        ObjectMapper objectMapper, Bus<Message> bus) {  // ✅ Inject ObjectMapper
+        ObjectMapper objectMapper,
+        Bus<Message> bus) {
+        this(outboxStore, objectMapper, bus, DEFAULT_MAX_RETRIES, DEFAULT_BATCH_SIZE);
+    }
+
+    public OutboxPublisher(
+        OutboxStore outboxStore,
+        ObjectMapper objectMapper,
+        Bus<Message> bus,
+        int maxRetries,
+        int batchSize) {
         this.outboxStore = outboxStore;
         this.objectMapper = objectMapper;
         this.bus = bus;
+        this.maxRetries = maxRetries;
+        this.batchSize = batchSize;
     }
 
     public void publishPending() {
         try {
-            List<OutboxEvent> unpublished = outboxStore.getUnpublished(BATCH_SIZE);
+            List<OutboxEvent> unpublished = outboxStore.getUnpublished(batchSize);
 
             if (unpublished.isEmpty()) {
                 log.trace("No unpublished outbox events found");
@@ -131,10 +144,10 @@ public class OutboxPublisher implements EventPublisher {
             outboxEvent.getId(),
             reason);
 
-        if (outboxEvent.getRetryCount() >= MAX_RETRIES) {
+        if (outboxEvent.getRetryCount() >= maxRetries) {
             log.error("Max retries ({}) exceeded for outbox event {}. " +
                     "Moving to dead letter queue. Reason: {}",
-                MAX_RETRIES,
+                maxRetries,
                 outboxEvent.getId(),
                 reason);
 
@@ -145,7 +158,7 @@ public class OutboxPublisher implements EventPublisher {
             log.info("Event {} queued for retry. Attempt {} of {}",
                 outboxEvent.getId(),
                 outboxEvent.getRetryCount() + 1,
-                MAX_RETRIES);
+                maxRetries);
         }
     }
 

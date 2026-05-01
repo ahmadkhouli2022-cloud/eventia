@@ -145,7 +145,7 @@ public class JpaOutboxStore implements OutboxStore {
      */
     @Override
     @Transactional(readOnly = true)
-    public OutboxEvent findById(String eventId) {
+    public OutboxEvent findById(UUID eventId) {
         Objects.requireNonNull(eventId, "Event ID cannot be null");
         return repository.findById(eventId).orElse(null);
     }
@@ -161,7 +161,8 @@ public class JpaOutboxStore implements OutboxStore {
             throw new IllegalArgumentException("Timestamp must be positive");
         }
 
-        long deleted = repository.deletePublishedBefore(olderThanMillis);
+        Instant threshold = Instant.ofEpochMilli(olderThanMillis);
+        long deleted = repository.deletePublishedBefore(threshold);
         log.info("Deleted {} old published events", deleted);
         return deleted;
     }
@@ -185,4 +186,3 @@ public class JpaOutboxStore implements OutboxStore {
         return repository.countDeadLettered();
     }
 }
-

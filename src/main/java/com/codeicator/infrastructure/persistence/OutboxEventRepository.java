@@ -19,7 +19,7 @@ import java.util.UUID;
  * All methods are transactional to ensure data consistency.
  */
 @Repository
-public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String> {
+public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> {
 
     /**
      * Find all unpublished outbox events ordered by creation time.
@@ -96,13 +96,13 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
      * Delete published events older than specified timestamp.
      * Used for cleanup and archival.
      *
-     * @param olderThanMillis delete events published before this time
+     * @param olderThan delete events published before this time
      * @return number of events deleted
      */
     @Modifying
     @Transactional
-    @Query("DELETE FROM OutboxEvent o WHERE o.publishedAt < :olderThanMillis")
-    long deletePublishedBefore(@Param("olderThanMillis") long olderThanMillis);
+    @Query("DELETE FROM OutboxEvent o WHERE o.publishedAt < :olderThan")
+    long deletePublishedBefore(@Param("olderThan") Instant olderThan);
 
     /**
      * Mark an event as dead-lettered.
@@ -115,4 +115,3 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
     @Query("UPDATE OutboxEvent o SET o.deadLettered = TRUE WHERE o.id = :id")
     void markAsDeadLettered(@Param("id") UUID id);
 }
-
