@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Instant;
 
 /**
  * Interface for storing and retrieving outbox events.
@@ -73,7 +74,7 @@ public interface OutboxStore {
      * @param eventId the ID of the event
      * @param reason the error message from failed publish
      */
-    void recordFailure(UUID eventId, String reason);
+    void recordFailure(UUID eventId, String reason, Instant nextAttemptAt);
 
     /**
      * Move event to dead letter queue.
@@ -92,6 +93,12 @@ public interface OutboxStore {
      */
     List<OutboxEvent> getDeadLetterEvents();
 
+    List<OutboxEvent> getDeadLetterEvents(int limit);
+
+    List<OutboxEvent> getDeadLetterEventsBetween(Instant from, Instant to, int limit);
+
+    List<OutboxEvent> getDeadLetterEventsByIds(List<UUID> ids);
+
     /**
      * Get a single event by ID.
      * Used for debugging and recovery operations.
@@ -99,7 +106,7 @@ public interface OutboxStore {
      * @param eventId the event ID
      * @return the event if found
      */
-    OutboxEvent findById(String eventId);
+    OutboxEvent findById(UUID eventId);
 
     /**
      * Clean up old published events.
@@ -115,4 +122,3 @@ public interface OutboxStore {
      */
     long deletePublishedBefore(long olderThanMillis);
 }
-

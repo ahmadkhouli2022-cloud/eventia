@@ -2,6 +2,7 @@ package com.codeicator.infrastructure.persistence;
 
 import com.codeicator.domain.*;
 import com.codeicator.infrastructure.OutboxEvent;
+import com.codeicator.infrastructure.OutboxStore;
 import com.codeicator.messages.Event;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
@@ -17,12 +18,15 @@ public class JpaDataPersistentWithEventStore<T extends Aggregate.Domain>
 
     private final JpaRepository<T,?> aggregateRepository;
     private final ObjectMapper objectMapper; // ✅ Add ObjectMapper
+    private final OutboxStore outboxStore;
 
     public JpaDataPersistentWithEventStore(
         JpaRepository<T,?> aggregateRepository,
-        ObjectMapper objectMapper) {  // ✅ Inject ObjectMapper
+        ObjectMapper objectMapper,
+        OutboxStore outboxStore) {  // ✅ Inject ObjectMapper
         this.aggregateRepository = Objects.requireNonNull(aggregateRepository);
         this.objectMapper = Objects.requireNonNull(objectMapper);
+        this.outboxStore = Objects.requireNonNull(outboxStore);
     }
 
     @Override
@@ -51,8 +55,7 @@ public class JpaDataPersistentWithEventStore<T extends Aggregate.Domain>
                     .map(event -> OutboxEvent.from(event, objectMapper)) // ✅ Pass ObjectMapper
                     .collect(Collectors.toList());
 
-//                outboxStore.saveAll(outboxEvents);
-                //TODO add event store logic
+                outboxStore.saveAll(outboxEvents);
                 log.debug("Saved {} events to outbox", outboxEvents.size());
             }
 

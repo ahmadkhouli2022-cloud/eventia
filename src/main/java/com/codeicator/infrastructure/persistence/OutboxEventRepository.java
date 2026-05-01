@@ -19,7 +19,7 @@ import java.util.UUID;
  * All methods are transactional to ensure data consistency.
  */
 @Repository
-public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String> {
+public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> {
 
     /**
      * Find all unpublished outbox events ordered by creation time.
@@ -29,12 +29,14 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
      * @return list of unpublished events in creation order
      */
     @Query(value = """
-        SELECT o FROM OutboxEvent o
-        WHERE o.publishedAt IS NULL AND o.deadLettered = FALSE
-        ORDER BY o.createdAt ASC
+        SELECT * FROM outbox_events
+        WHERE published_at IS NULL
+          AND dead_lettered = FALSE
+          AND (next_attempt_at IS NULL OR next_attempt_at <= :now)
+        ORDER BY created_at ASC
         LIMIT :limit
-        """)
-    List<OutboxEvent> findUnpublished(@Param("limit") int limit);
+        """, nativeQuery = true)
+    List<OutboxEvent> findUnpublished(@Param("limit") int limit, @Param("now") Instant now);
 
     /**
      * Mark a single event as published.
@@ -60,10 +62,14 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
     @Query("""
         UPDATE OutboxEvent o
         SET o.retryCount = o.retryCount + 1,
-            o.failureReason = :reason
+            o.failureReason = :reason,
+            o.nextAttemptAt = :nextAttemptAt
         WHERE o.id = :id
         """)
-    void recordFailure(@Param("id") UUID id, @Param("reason") String reason);
+    void recordFailure(
+        @Param("id") UUID id,
+        @Param("reason") String reason,
+        @Param("nextAttemptAt") Instant nextAttemptAt);
 
     /**
      * Get all dead-lettered events.
@@ -96,13 +102,13 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
      * Delete published events older than specified timestamp.
      * Used for cleanup and archival.
      *
-     * @param olderThanMillis delete events published before this time
+     * @param olderThan delete events published before this time
      * @return number of events deleted
      */
     @Modifying
     @Transactional
-    @Query("DELETE FROM OutboxEvent o WHERE o.publishedAt < :olderThanMillis")
-    long deletePublishedBefore(@Param("olderThanMillis") long olderThanMillis);
+    @Query("DELETE FROM OutboxEvent o WHERE o.publishedAt < :olderThan")
+    long deletePublishedBefore(@Param("olderThan") Instant olderThan);
 
     /**
      * Mark an event as dead-lettered.
@@ -114,5 +120,27 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String
     @Transactional
     @Query("UPDATE OutboxEvent o SET o.deadLettered = TRUE WHERE o.id = :id")
     void markAsDeadLettered(@Param("id") UUID id);
-}
 
+    @Query(value = """
+        SELECT * FROM outbox_events
+        WHERE dead_lettered = TRUE
+        ORDER BY created_at ASC
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<OutboxEvent> findDeadLettered(@Param("limit") int limit);
+
+    @Query(value = """
+        SELECT * FROM outbox_events
+        WHERE dead_lettered = TRUE
+          AND created_at BETWEEN :from AND :to
+        ORDER BY created_at ASC
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<OutboxEvent> findDeadLetteredBetween(
+        @Param("from") Instant from,
+        @Param("to") Instant to,
+        @Param("limit") int limit);
+
+    @Query("SELECT o FROM OutboxEvent o WHERE o.id IN :ids AND o.deadLettered = TRUE")
+    List<OutboxEvent> findDeadLetteredByIds(@Param("ids") List<UUID> ids);
+}

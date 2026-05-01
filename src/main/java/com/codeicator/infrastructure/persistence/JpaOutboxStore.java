@@ -75,7 +75,7 @@ public class JpaOutboxStore implements OutboxStore {
             throw new IllegalArgumentException("Limit must be positive");
         }
 
-        List<OutboxEvent> unpublished = repository.findUnpublished(limit);
+        List<OutboxEvent> unpublished = repository.findUnpublished(limit, Instant.now());
         log.debug("Found {} unpublished events", unpublished.size());
         return unpublished;
     }
@@ -99,12 +99,13 @@ public class JpaOutboxStore implements OutboxStore {
      */
     @Override
     @Transactional
-    public void recordFailure(UUID eventId, String reason) {
+    public void recordFailure(UUID eventId, String reason, Instant nextAttemptAt) {
         Objects.requireNonNull(eventId, "Event ID cannot be null");
         Objects.requireNonNull(reason, "Failure reason cannot be null");
+        Objects.requireNonNull(nextAttemptAt, "Next attempt time cannot be null");
 
         try {
-            repository.recordFailure(eventId, reason);
+            repository.recordFailure(eventId, reason, nextAttemptAt);
             log.debug("Recorded failure for event {}: {}", eventId, reason);
         } catch (Exception e) {
             log.error("Failed to record failure for event {}", eventId, e);
@@ -139,13 +140,52 @@ public class JpaOutboxStore implements OutboxStore {
         return deadLettered;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<OutboxEvent> getDeadLetterEvents(int limit) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Limit must be positive");
+        }
+
+        List<OutboxEvent> deadLettered = repository.findDeadLettered(limit);
+        log.debug("Found {} dead-lettered events", deadLettered.size());
+        return deadLettered;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OutboxEvent> getDeadLetterEventsBetween(Instant from, Instant to, int limit) {
+        Objects.requireNonNull(from, "From timestamp cannot be null");
+        Objects.requireNonNull(to, "To timestamp cannot be null");
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Limit must be positive");
+        }
+
+        List<OutboxEvent> deadLettered = repository.findDeadLetteredBetween(from, to, limit);
+        log.debug("Found {} dead-lettered events between {} and {}", deadLettered.size(), from, to);
+        return deadLettered;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OutboxEvent> getDeadLetterEventsByIds(List<UUID> ids) {
+        Objects.requireNonNull(ids, "Ids cannot be null");
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+
+        List<OutboxEvent> deadLettered = repository.findDeadLetteredByIds(ids);
+        log.debug("Found {} dead-lettered events by ids", deadLettered.size());
+        return deadLettered;
+    }
+
     /**
      * Get a single event by ID.
      * {@inheritDoc}
      */
     @Override
     @Transactional(readOnly = true)
-    public OutboxEvent findById(String eventId) {
+    public OutboxEvent findById(UUID eventId) {
         Objects.requireNonNull(eventId, "Event ID cannot be null");
         return repository.findById(eventId).orElse(null);
     }
@@ -161,7 +201,8 @@ public class JpaOutboxStore implements OutboxStore {
             throw new IllegalArgumentException("Timestamp must be positive");
         }
 
-        long deleted = repository.deletePublishedBefore(olderThanMillis);
+        Instant threshold = Instant.ofEpochMilli(olderThanMillis);
+        long deleted = repository.deletePublishedBefore(threshold);
         log.info("Deleted {} old published events", deleted);
         return deleted;
     }
@@ -185,4 +226,3 @@ public class JpaOutboxStore implements OutboxStore {
         return repository.countDeadLettered();
     }
 }
-

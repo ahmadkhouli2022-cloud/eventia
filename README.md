@@ -2,7 +2,7 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/com.codeicator/eventia-core.svg)](https://search.maven.org/artifact/com.codeicator/eventia-core)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Java Version](https://img.shields.io/badge/Java-17%2B-blue)](https://www.oracle.com/java/)
+[![Java Version](https://img.shields.io/badge/Java-21%2B-blue)](https://www.oracle.com/java/)
 [![Build Status](https://img.shields.io/github/workflow/status/ahmadkhouli2022-cloud/eventia/CI)](https://github.com/ahmadkhouli2022-cloud/eventia/actions)
 
 **Eventia** is a lightweight, production-ready Java library for building reliable event-driven applications with guaranteed event delivery using the Outbox pattern.
@@ -28,7 +28,7 @@
 <dependency>
     <groupId>com.codeicator</groupId>
     <artifactId>eventia</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
@@ -111,16 +111,13 @@ public class OrderService {
 ### 4. Configure
 
 ```yaml
-eventia:
-  outbox:
-    enabled: true
-    polling-interval: 1000  # Poll every 1 second
-    max-retries: 3
-    batch-size: 100
-    cleanup:
-      enabled: true
-      schedule: "0 0 2 * * *"  # Daily at 2 AM
-      retention-days: 30
+outbox:
+  polling-interval: 1000  # Poll every 1 second
+  max-retries: 3
+  batch-size: 100
+  retry-backoff-ms: 1000
+  cleanup-schedule: "0 0 2 * * *"  # Daily at 2 AM
+  cleanup-retention-days: 30
 ```
 
 **That's it!** Eventia handles:
@@ -357,181 +354,126 @@ outboxPublisher.publishPending(); // ✅ Guaranteed delivery
 [//]: # (```)
 
 [//]: # ()
-[//]: # (## 🧪 Testing)
+## 📊 Metrics
 
-[//]: # ()
-[//]: # (Eventia provides test utilities for easy testing:)
+Eventia exposes metrics hooks via `OutboxMetricsRecorder`. If Micrometer is on the classpath, the default recorder emits counters:
+- `eventia.outbox.publish.success`
+- `eventia.outbox.publish.failure`
+- `eventia.outbox.dead_letter`
 
-[//]: # ()
-[//]: # (```java)
+## ♻️ Replay
 
-[//]: # (@SpringBootTest)
+Use `OutboxPublisher` to replay dead-lettered events:
+- `replayDeadLettered(limit)`
+- `replayDeadLetteredBetween(from, to, limit)`
+- `replayDeadLetteredByIds(ids)`
 
-[//]: # (@Import&#40;EventiaTestConfig.class&#41;)
+## 🧬 Event Schema Versioning
 
-[//]: # (class OrderServiceTest {)
+Each event includes `schemaVersion` (default 1). The value is persisted in outbox entries to support payload evolution.
 
-[//]: # (    )
-[//]: # (    @Autowired)
+## 🧪 Testing
 
-[//]: # (    private OrderService orderService;)
+Eventia provides test utilities for easy testing:
 
-[//]: # (    )
-[//]: # (    @Autowired)
+```java
+@SpringBootTest
+@Import(EventiaTestConfig.class)
+class OrderServiceTest {
+    @Autowired
+    private OrderService orderService;
 
-[//]: # (    private TestEventCaptor eventCaptor;)
+    @Autowired
+    private TestEventCaptor eventCaptor;
 
-[//]: # (    )
-[//]: # (    @Test)
+    @Test
+    void shouldPublishOrderCreatedEvent() {
+        // When
+        orderService.createOrder(command);
 
-[//]: # (    void shouldPublishOrderCreatedEvent&#40;&#41; {)
+        // Then - Event captured in test mode
+        OrderCreatedEvent event = eventCaptor.getEvent(OrderCreatedEvent.class);
+        assertThat(event.getOrderId()).isNotNull();
+    }
+}
+```
 
-[//]: # (        // When)
+## 📊 Performance
 
-[//]: # (        orderService.createOrder&#40;command&#41;;)
+Eventia is designed for high-throughput production systems:
 
-[//]: # (        )
-[//]: # (        // Then - Event captured in test mode)
+| Metric | Value |
+|--------|-------|
+| Events persisted/sec | ~10,000 |
+| Events published/sec | ~5,000 |
+| Latency (p95) | < 10ms |
+| Memory footprint | ~50MB |
+| Database overhead | ~1KB per event |
 
-[//]: # (        OrderCreatedEvent event = eventCaptor.getEvent&#40;OrderCreatedEvent.class&#41;;)
+*Benchmarks run on AWS EC2 t3.medium with PostgreSQL RDS*
 
-[//]: # (        assertThat&#40;event.getOrderId&#40;&#41;&#41;.isNotNull&#40;&#41;;)
+## 🤝 Contributing
 
-[//]: # (    })
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
 
-[//]: # (})
+### Development Setup
 
-[//]: # (```)
+```bash
+# Clone repository
+git clone https://github.com/yourusername/eventia.git
+cd eventia
 
-[//]: # ()
-[//]: # (## 📊 Performance)
+# Build
+./mvnw clean install
 
-[//]: # ()
-[//]: # (Eventia is designed for high-throughput production systems:)
+# Run tests
+./mvnw test
 
-[//]: # ()
-[//]: # (| Metric | Value |)
+# Run integration tests
+./mvnw verify -P integration-tests
+```
 
-[//]: # (|--------|-------|)
+## 📝 License
 
-[//]: # (| Events persisted/sec | ~10,000 |)
+Eventia is licensed under the [Apache License 2.0](LICENSE).
 
-[//]: # (| Events published/sec | ~5,000 |)
+## 🙏 Acknowledgments
 
-[//]: # (| Latency &#40;p95&#41; | < 10ms |)
+Eventia is inspired by:
+- [Microservices Patterns](https://microservices.io/patterns/data/transactional-outbox.html) by Chris Richardson
+- [Domain-Driven Design](https://www.domainlanguage.com/ddd/) by Eric Evans
+- [Implementing Domain-Driven Design](https://www.amazon.com/Implementing-Domain-Driven-Design-Vaughn-Vernon/dp/0321834577) by Vaughn Vernon
 
-[//]: # (| Memory footprint | ~50MB |)
+## 📞 Support
 
-[//]: # (| Database overhead | ~1KB per event |)
+- 📖 [Documentation](https://codeicator.com/eventia/docs)
+- 💬 [Discord Community](https://discord.gg/eventia)
+- 🐛 [Issue Tracker](https://github.com/codeicator/eventia/issues)
+- 📧 [Email Support](mailto:support@codeicator.com)
+- 🐦 [Twitter](https://twitter.com/codeicator)
 
-[//]: # ()
-[//]: # (*Benchmarks run on AWS EC2 t3.medium with PostgreSQL RDS*)
+## 🗺️ Roadmap
 
-[//]: # ()
-[//]: # (## 🤝 Contributing)
+### Version 1.1 (Q2 2024)
+- [ ] Event replay functionality
+- [ ] Enhanced monitoring dashboard
+- [ ] Performance improvements
 
-[//]: # ()
-[//]: # (We welcome contributions! Please see our [Contributing Guide]&#40;CONTRIBUTING.md&#41;.)
+### Version 1.2 (Q3 2024)
+- [ ] Event versioning support
+- [ ] Schema registry integration
+- [ ] Multi-tenancy support
 
-[//]: # ()
-[//]: # (### Development Setup)
+### Version 2.0 (Q4 2024)
+- [ ] Event sourcing support
+- [ ] Saga pattern implementation
+- [ ] Cloud-native deployment tools
 
-[//]: # ()
-[//]: # (```bash)
+## ⭐ Star History
 
-[//]: # (# Clone repository)
+[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/eventia&type=Date)](https://star-history.com/#yourusername/eventia&Date)
 
-[//]: # (git clone https://github.com/yourusername/eventia.git)
-
-[//]: # (cd eventia)
-
-[//]: # ()
-[//]: # (# Build)
-
-[//]: # (./mvnw clean install)
-
-[//]: # ()
-[//]: # (# Run tests)
-
-[//]: # (./mvnw test)
-
-[//]: # ()
-[//]: # (# Run integration tests)
-
-[//]: # (./mvnw verify -P integration-tests)
-
-[//]: # (```)
-
-[//]: # ()
-[//]: # (## 📝 License)
-
-[//]: # ()
-[//]: # (Eventia is licensed under the [Apache License 2.0]&#40;LICENSE&#41;.)
-
-[//]: # ()
-[//]: # (## 🙏 Acknowledgments)
-
-[//]: # ()
-[//]: # (Eventia is inspired by:)
-
-[//]: # (- [Microservices Patterns]&#40;https://microservices.io/patterns/data/transactional-outbox.html&#41; by Chris Richardson)
-
-[//]: # (- [Domain-Driven Design]&#40;https://www.domainlanguage.com/ddd/&#41; by Eric Evans)
-
-[//]: # (- [Implementing Domain-Driven Design]&#40;https://www.amazon.com/Implementing-Domain-Driven-Design-Vaughn-Vernon/dp/0321834577&#41; by Vaughn Vernon)
-
-[//]: # ()
-[//]: # (## 📞 Support)
-
-[//]: # ()
-[//]: # (- 📖 [Documentation]&#40;https://codeicator.com/eventia/docs&#41;)
-
-[//]: # (- 💬 [Discord Community]&#40;https://discord.gg/eventia&#41;)
-
-[//]: # (- 🐛 [Issue Tracker]&#40;https://github.com/codeicator/eventia/issues&#41;)
-
-[//]: # (- 📧 [Email Support]&#40;mailto:support@codeicator.com&#41;)
-
-[//]: # (- 🐦 [Twitter]&#40;https://twitter.com/codeicator&#41;)
-
-[//]: # ()
-[//]: # (## 🗺️ Roadmap)
-
-[//]: # ()
-[//]: # (### Version 1.1 &#40;Q2 2024&#41;)
-
-[//]: # (- [ ] Event replay functionality)
-
-[//]: # (- [ ] Enhanced monitoring dashboard)
-
-[//]: # (- [ ] Performance improvements)
-
-[//]: # ()
-[//]: # (### Version 1.2 &#40;Q3 2024&#41;)
-
-[//]: # (- [ ] Event versioning support)
-
-[//]: # (- [ ] Schema registry integration)
-
-[//]: # (- [ ] Multi-tenancy support)
-
-[//]: # ()
-[//]: # (### Version 2.0 &#40;Q4 2024&#41;)
-
-[//]: # (- [ ] Event sourcing support)
-
-[//]: # (- [ ] Saga pattern implementation)
-
-[//]: # (- [ ] Cloud-native deployment tools)
-
-[//]: # ()
-[//]: # (## ⭐ Star History)
-
-[//]: # ()
-[//]: # ([![Star History Chart]&#40;https://api.star-history.com/svg?repos=yourusername/eventia&type=Date&#41;]&#40;https://star-history.com/#yourusername/eventia&Date&#41;)
-
-[//]: # ()
-[//]: # (---)
+---
 
 <p align="center">
   <b>Built with ❤️ by the Codeicator team</b><br>

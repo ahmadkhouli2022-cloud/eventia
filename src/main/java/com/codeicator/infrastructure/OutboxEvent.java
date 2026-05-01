@@ -56,6 +56,12 @@ public class OutboxEvent implements Serializable {
     @Builder.Default
     private boolean deadLettered = false;
 
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
+    @Column(name = "schema_version", nullable = false)
+    private int schemaVersion;
+
     /**
      * Factory method to create outbox event from domain event
      */
@@ -65,6 +71,7 @@ public class OutboxEvent implements Serializable {
                 .id(event.getId())
                 .eventType(event.getClass().getName())
                 .eventPayload(objectMapper.writeValueAsString(event))
+                .schemaVersion(event.getSchemaVersion())
                 .createdAt(event.getRaisedAt().toInstant())
                 .retryCount(0)
                 .deadLettered(false)
@@ -91,9 +98,10 @@ public class OutboxEvent implements Serializable {
         this.publishedAt = Instant.now();
     }
 
-    public void recordFailure(String reason) {
+    public void recordFailure(String reason, Instant nextAttemptAt) {
         this.failureReason = reason;
         this.retryCount++;
+        this.nextAttemptAt = nextAttemptAt;
     }
 
     @JsonIgnore
@@ -109,5 +117,10 @@ public class OutboxEvent implements Serializable {
     @JsonIgnore
     public long getAgeMillis() {
         return Instant.now().minusMillis(createdAt.toEpochMilli()).toEpochMilli();
+    }
+
+    @JsonIgnore
+    public Instant getNextAttemptAt() {
+        return nextAttemptAt;
     }
 }
