@@ -20,8 +20,6 @@ public abstract class Event extends Message{
     private final String correlationId;
     @JsonProperty("orderId")
     private final int orderId;
-    @Getter
-    @Setter
     @Builder.Default
     @JsonProperty("version")
     protected long version=1;

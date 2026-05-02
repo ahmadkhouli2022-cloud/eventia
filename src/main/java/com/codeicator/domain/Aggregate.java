@@ -4,12 +4,14 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import com.codeicator.infrastructure.reactivebus.DomainEventHandler;
 import com.codeicator.infrastructure.reactivebus.annotations.HandleDomainEvent;
+import com.codeicator.messages.DomainEvent;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.codeicator.messages.Event;
 import lombok.Getter;
@@ -19,6 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.util.ReflectionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 public abstract class Aggregate<T extends Aggregate.Domain> {
@@ -39,6 +43,8 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
     @SuperBuilder(toBuilder = true)
     @NoArgsConstructor
     public abstract static class Domain {
+
+        private UUID id;
         @JsonIgnore
         private final transient Lock lock=new ReentrantLock();
 
@@ -49,13 +55,23 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         private transient long version = 0;
 
         @JsonIgnore
-        public final void raiseDomainEvent(Event event) {
+        public final void raiseDomainEvent(DomainEvent event) {
+            Objects.requireNonNull(event, "DomainEvent cannot be null");
             try {
                 lock.lock();
-                event.setVersion(this.version);
-                domainEvents.add(event);
+                Object builder = event.getClass().getMethod("toBuilder").invoke(event);
+                builder.getClass().getMethod("streamType", String.class)
+                    .invoke(builder, this.getClass().getName());
+                builder.getClass().getMethod("version", long.class)
+                    .invoke(builder, this.version);
+                builder.getClass().getMethod("streamId", String.class)
+                    .invoke(builder, this.id.toString());
+                Event builtEvent = (Event) builder.getClass().getMethod("build").invoke(builder);
+                domainEvents.add(builtEvent);
                 this.version++;
-            }finally {
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("Failed to rebuild domain event from builder", e);
+            } finally {
                 lock.unlock();
             }
         }
@@ -115,7 +131,7 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
     }
     private void ensureHandlersInitialized() {
         if (!handlersInitialized) {
-            synchronized (this) {
+            synchronized (Aggregate.class) {
                 if (!handlersInitialized) {
                     try {
                         this.registerHandlers();
@@ -135,25 +151,37 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
     protected static final ConcurrentHashMap<String,List<DomainEventHandler>> handlersMap=new ConcurrentHashMap<>();
 
     protected void registerHandlers() throws ClassNotFoundException, NoSuchMethodException {
-        var handlers = context.getBeansWithAnnotation(HandleDomainEvent.class);
+        var beans = context.getBeansOfType(Object.class);
 
-        for (var entry : handlers.entrySet()) {
+        for (var entry : beans.entrySet()) {
             Object handlerInstance = entry.getValue();
-            Class<?> handlerClass = handlerInstance.getClass();
+            Class<?> targetClass = AopUtils.getTargetClass(handlerInstance);
 
-            String realClassName = handlerClass.getName().split("\\$")[0];
-            Class<?> realClass = getClass().getClassLoader().loadClass(realClassName);
+            for (Method method : targetClass.getMethods()) {
+                HandleDomainEvent annotation = method.getAnnotation(HandleDomainEvent.class);
+                if (annotation == null) {
+                    continue;
+                }
+                if (method.getParameterCount() != 1) {
+                    log.warn("Skipping handler method {}.{}: expected single parameter",
+                            targetClass.getName(), method.getName());
+                    continue;
+                }
+                ReflectionUtils.makeAccessible(method);
 
-            Method method = realClass.getMethod(entry.getKey());
-            HandleDomainEvent annotation = method.getAnnotation(HandleDomainEvent.class);
+                Consumer<Object> func = message -> {
+                    try {
+                        method.invoke(handlerInstance, message);
+                    } catch (Exception e) {
+                        log.error("Error invoking handler {}.{}", targetClass.getName(), method.getName(), e);
+                    }
+                };
 
-            @SuppressWarnings("unchecked")
-            Consumer<Object> func = (Consumer<Object>) handlerInstance;
+                var messageHandler = new DomainEventHandler(func, annotation.messageType());
 
-            var messageHandler = new DomainEventHandler(func, annotation.messageType());
-
-            getHandlersMap().computeIfAbsent(annotation.messageType().getName(), key -> new ArrayList<>())
-                .add(messageHandler);
+                getHandlersMap().computeIfAbsent(annotation.messageType().getName(), key -> new ArrayList<>())
+                    .add(messageHandler);
+            }
         }
     }
 
