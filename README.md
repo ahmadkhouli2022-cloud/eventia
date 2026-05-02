@@ -1,6 +1,6 @@
 # Eventia
 
-[![Maven Central](https://img.shields.io/maven-central/v/com.codeicator/eventia-core.svg)](https://search.maven.org/artifact/com.codeicator/eventia-core)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.ahmadkhouli2022-cloud/eventia.svg)](https://search.maven.org/artifact/io.github.ahmadkhouli2022-cloud/eventia)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Java Version](https://img.shields.io/badge/Java-21%2B-blue)](https://www.oracle.com/java/)
 [![Build Status](https://img.shields.io/github/workflow/status/ahmadkhouli2022-cloud/eventia/CI)](https://github.com/ahmadkhouli2022-cloud/eventia/actions)
@@ -26,7 +26,7 @@
 
 ```xml
 <dependency>
-    <groupId>com.codeicator</groupId>
+    <groupId>io.github.ahmadkhouli2022-cloud</groupId>
     <artifactId>eventia</artifactId>
     <version>2.0.1</version>
 </dependency>
