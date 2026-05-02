@@ -9,18 +9,23 @@ import reactor.core.scheduler.Schedulers;
 public class StreamBridge<T> {
 
     private static final Logger logger = LoggerFactory.getLogger(StreamBridge.class);
-    private final Flux<T> flux ;
-    private Consumer<T> messageEmitter;
+    private static final int BUFFER_SIZE = 1024;
+    private final Flux<T> flux;
+    private volatile Consumer<T> messageEmitter;
     private final AtomicInteger subscriberCount = new AtomicInteger(0);
 
     public StreamBridge(Class<T> type){
-        flux= Flux.create(fluxSink ->messageEmitter=fluxSink::next)
+        flux = Flux.<T>create(fluxSink -> messageEmitter = fluxSink::next)
                 .cast(type)
                 .share()
                 .publishOn(Schedulers.boundedElastic())
-                .onBackpressureBuffer()
+                .onBackpressureBuffer(
+                        BUFFER_SIZE,
+                        dropped -> logger.warn("Dropping message due to backpressure: {}", dropped),
+                        reactor.core.publisher.BufferOverflowStrategy.DROP_OLDEST)
                 .onErrorContinue((throwable, o) ->
-                        logger.error("Error  while processing    message {}", o.getClass().getName(), throwable))
+                        logger.error("Error while processing message {}",
+                                o == null ? "<null>" : o.getClass().getName(), throwable))
                 .doOnSubscribe(subscription -> subscriberCount.incrementAndGet())
                 .doOnCancel(subscriberCount::decrementAndGet);
 
@@ -31,8 +36,13 @@ public class StreamBridge<T> {
     }
 
     public void publish(T message){
-        if (subscriberCount.get()==0)
+        if (subscriberCount.get() == 0) {
             return;
-        messageEmitter.accept(message);
+        }
+        Consumer<T> emitter = messageEmitter;
+        if (emitter == null) {
+            return;
+        }
+        emitter.accept(message);
     }
 }
