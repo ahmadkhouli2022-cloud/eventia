@@ -21,6 +21,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -263,7 +264,7 @@ public abstract class Aggregate<T extends Aggregate.Domain,IDType> {
 
         for (var entry : beans.entrySet()) {
             Object handlerInstance = entry.getValue();
-            Class<?> targetClass = AopUtils.getTargetClass(handlerInstance);
+            Class<?> targetClass = ClassUtils.getUserClass(AopUtils.getTargetClass(handlerInstance));
 
             for (Method method : targetClass.getMethods()) {
                 HandleDomainEvent annotation = method.getAnnotation(HandleDomainEvent.class);

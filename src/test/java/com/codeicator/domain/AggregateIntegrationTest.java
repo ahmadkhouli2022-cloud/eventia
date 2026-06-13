@@ -22,12 +22,25 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@SpringBootTest(classes = AggregateIntegrationTest.TestApplication.class)
+@SpringBootTest(
+    classes = AggregateIntegrationTest.TestApplication.class,
+    webEnvironment = SpringBootTest.WebEnvironment.NONE,
+    properties = {
+        "spring.cloud.function.scan.enabled=false",
+        "spring.cloud.function.scan=false",
+        "spring.cloud.function.enabled=false",
+        "spring.cloud.stream.enabled=false",
+        "spring.cloud.stream.function.autodetect=false"
+    }
+)
 class AggregateIntegrationTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
     static class TestApplication {
+        private final java.util.concurrent.atomic.AtomicInteger topUpCounter =
+            new java.util.concurrent.atomic.AtomicInteger(0);
+
         @Bean
         TestHandler testHandler() {
             return new TestHandler();
@@ -36,6 +49,17 @@ class AggregateIntegrationTest {
         @Bean
         DataPersistent<TestDomain> dataPersistent() {
             return domain -> domain;
+        }
+
+        @Bean
+        java.util.concurrent.atomic.AtomicInteger topUpCounter() {
+            return topUpCounter;
+        }
+
+        @Bean
+        @HandleDomainEvent(messageType = TestEvent.class)
+        public java.util.function.Consumer<TestEvent> topUpTransactionFailedEventHandler1() {
+            return ev -> topUpCounter.incrementAndGet();
         }
     }
 
@@ -72,6 +96,9 @@ class AggregateIntegrationTest {
     @Autowired
     private DataPersistent<TestDomain> persistent;
 
+    @Autowired
+    private java.util.concurrent.atomic.AtomicInteger topUpCounter;
+
     @BeforeEach
     void resetHandlers() {
         ReflectionTestUtils.setField(Aggregate.class, "handlersInitialized", false);
@@ -81,6 +108,8 @@ class AggregateIntegrationTest {
         if (handlersMap != null) {
             handlersMap.clear();
         }
+        handler.count.set(0);
+        topUpCounter.set(0);
     }
 
     @Test
@@ -100,5 +129,23 @@ class AggregateIntegrationTest {
         aggregate.aggregate(domain);
 
         assertEquals(1, handler.count.get());
+    }
+
+    @Test
+    void beanAnnotatedFactoryMethodIsDiscoveredAndInvoked() {
+        TestAggregate aggregate = new TestAggregate(persistent, context);
+        TestDomain domain = new TestDomain();
+        UUID id = UUID.randomUUID();
+        ReflectionTestUtils.setField(domain, "id", id);
+        TestEvent event = TestEvent.builder()
+            .streamId(String.valueOf(id))
+            .streamType(domain.getClass().getName())
+            .build();
+
+        domain.raiseDomainEvent(event);
+        aggregate.aggregate(domain);
+
+        // the @Bean method annotated with @HandleDomainEvent should have been registered and invoked
+        assertEquals(1, topUpCounter.get());
     }
 }
