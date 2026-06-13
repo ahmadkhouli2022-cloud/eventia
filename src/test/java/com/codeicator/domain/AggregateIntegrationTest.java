@@ -84,8 +84,11 @@ class AggregateIntegrationTest {
     void aggregateInvokesHandlersFromApplicationContext() {
         TestAggregate aggregate = new TestAggregate(persistent, context);
         TestDomain domain = new TestDomain();
-        ReflectionTestUtils.setField(domain, "id", UUID.randomUUID());
+        UUID id = UUID.randomUUID();
+        ReflectionTestUtils.setField(domain, "id", id);
         TestEvent event = TestEvent.builder()
+            .streamId(String.valueOf(id))
+            .streamType(domain.getClass().getName())
             .correlationId("corr-1")
             .orderId(1)
             .build();

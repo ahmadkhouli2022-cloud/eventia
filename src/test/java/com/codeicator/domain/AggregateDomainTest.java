@@ -23,8 +23,11 @@ class AggregateDomainTest {
     @Test
     void raiseDomainEventTracksVersionAndUncommittedEvents() {
         TestDomain domain = new TestDomain();
-        ReflectionTestUtils.setField(domain, "id", UUID.randomUUID());
+        UUID id = UUID.randomUUID();
+        ReflectionTestUtils.setField(domain, "id", id);
         TestEvent event = TestEvent.builder()
+            .streamId(String.valueOf(id))
+            .streamType(domain.getClass().getName())
             .correlationId("corr-1")
             .orderId(1)
             .build();
@@ -34,7 +37,7 @@ class AggregateDomainTest {
         assertEquals(1, domain.getUncommittedEvents().size());
         assertEquals(1, domain.getVersion());
         Event persistedEvent = domain.getUncommittedEvents().getFirst();
-        assertEquals(0, persistedEvent.getVersion());
+        assertEquals(1, persistedEvent.getVersion());
         assertTrue(persistedEvent instanceof TestEvent);
     }
 }
