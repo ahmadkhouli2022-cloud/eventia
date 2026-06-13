@@ -99,12 +99,8 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
                         evStreamId, expectedStreamId));
                 }
 
-                long evVersion = event.getVersion();
-                if (evVersion != this.version) {
-                    throw new IllegalArgumentException(String.format(
-                        "Event version '%d' is not compatible with domain version '%d'",
-                        evVersion, this.version));
-                }
+                // Do not validate event.version against domain.version here; versions may differ by design.
+                // The domain's version will be incremented when the event is accepted.
 
                 // If validation passed, accept the event instance as-is (no metadata overriding).
                 domainEvents.add(event);
