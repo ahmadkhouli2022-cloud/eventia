@@ -270,11 +270,6 @@ public abstract class Aggregate<T extends Aggregate.Domain,IDType> {
                 if (annotation == null) {
                     continue;
                 }
-                if (method.getParameterCount() != 1) {
-                    log.warn("Skipping handler method {}.{}: expected single parameter",
-                            targetClass.getName(), method.getName());
-                    continue;
-                }
                 ReflectionUtils.makeAccessible(method);
 
                 Consumer<Object> func = message -> {
