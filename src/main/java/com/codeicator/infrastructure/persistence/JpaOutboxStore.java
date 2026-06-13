@@ -27,7 +27,6 @@ import java.util.UUID;
 public class JpaOutboxStore implements OutboxStore {
 
     private final OutboxEventRepository repository;
-    private final ObjectMapper objectMapper=new ObjectMapper();
 
     public JpaOutboxStore(OutboxEventRepository repository) {
         this.repository = Objects.requireNonNull(repository,

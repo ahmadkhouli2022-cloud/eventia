@@ -7,6 +7,9 @@
 
 **Eventia** is a lightweight, production-ready Java library for building reliable event-driven applications with guaranteed event delivery using the Outbox pattern.
 
+  # Disable automatic deletion of old published outbox events
+  # Set to false to retain published events indefinitely (useful for audit/debug)
+  cleanup-enabled: true
 ## ✨ Features
 
 - 🎯 **Guaranteed Event Delivery** - Events are never lost, even during failures
@@ -22,14 +25,15 @@
 
 ## 🚀 Quick Start
 
+
 ### Maven
 
 ```xml
-<dependency>
-    <groupId>io.github.ahmadkhouli2022-cloud</groupId>
-    <artifactId>eventia</artifactId>
-    <version>2.0.1</version>
-</dependency>
+  <dependency>
+      <groupId>io.github.ahmadkhouli2022-cloud</groupId>
+      <artifactId>eventia</artifactId>
+      <version>2.1.0</version>
+  </dependency>
 ```
 
 [//]: # (### Gradle)

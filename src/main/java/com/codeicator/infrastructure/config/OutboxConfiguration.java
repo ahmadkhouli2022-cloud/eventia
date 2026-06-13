@@ -41,6 +41,9 @@ public class OutboxConfiguration {
     @Value("${outbox.cleanup-retention-days:30}")
     private long retentionDays;
 
+    @Value("${outbox.cleanup-enabled:false}")
+    private boolean cleanupEnabled;
+
     @Value("${outbox.retry-backoff-ms:1000}")
     private long retryBackoffMillis;
 
@@ -80,12 +83,31 @@ public class OutboxConfiguration {
         );
     }
 
+    /**
+     * Health indicator for outbox backlog. Exposed via Spring Boot Actuator if present.
+     */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnClass(name = "org.springframework.boot.actuate.health.HealthIndicator")
+    public org.springframework.boot.actuate.health.HealthIndicator outboxHealthIndicator(OutboxStore outboxStore) {
+        return () -> {
+            try {
+                // Use lightweight check: fetch one unpublished event to determine backlog presence
+                int unpublished = outboxStore.getUnpublished(1).size();
+                return org.springframework.boot.actuate.health.Health.up()
+                    .withDetail("unpublishedCount", unpublished)
+                    .build();
+            } catch (Exception e) {
+                return org.springframework.boot.actuate.health.Health.down(e).build();
+            }
+        };
+    }
+
     @Bean
     public OutboxPollingJob outboxPollingJob(
         OutboxPublisher outboxPublisher,
         OutboxStore outboxStore) {
         log.info("Creating OutboxPollingJob bean");
-        return new OutboxPollingJob(outboxPublisher, outboxStore, retentionDays);
+        return new OutboxPollingJob(outboxPublisher, outboxStore, retentionDays, cleanupEnabled);
     }
 
 
@@ -109,14 +131,17 @@ public class OutboxConfiguration {
         private final OutboxPublisher outboxPublisher;
         private final OutboxStore outboxStore;
         private final long retentionDays;
+        private final boolean cleanupEnabled;
 
         public OutboxPollingJob(
             OutboxPublisher outboxPublisher,
             OutboxStore outboxStore,
-            long retentionDays) {
+            long retentionDays,
+            boolean cleanupEnabled) {
             this.outboxPublisher = outboxPublisher;
             this.outboxStore = outboxStore;
             this.retentionDays = retentionDays;
+            this.cleanupEnabled = cleanupEnabled;
         }
 
         /**
@@ -148,6 +173,11 @@ public class OutboxConfiguration {
 
         @Scheduled(cron = "${outbox.cleanup-schedule:0 0 2 * * *}")
         public void cleanupOldPublishedEvents() {
+            if (!cleanupEnabled) {
+                log.debug("Outbox cleanup is disabled by configuration");
+                return;
+            }
+
             try {
                 long thresholdMillis = System.currentTimeMillis() -
                     (retentionDays * 24 * 60 * 60 * 1000);

@@ -116,7 +116,10 @@ public class OutboxEvent implements Serializable {
 
     @JsonIgnore
     public long getAgeMillis() {
-        return Instant.now().minusMillis(createdAt.toEpochMilli()).toEpochMilli();
+        if (createdAt == null) {
+            return 0L;
+        }
+        return Instant.now().toEpochMilli() - createdAt.toEpochMilli();
     }
 
     @JsonIgnore

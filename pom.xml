@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.github.ahmadkhouli2022-cloud</groupId>
     <artifactId>eventia</artifactId>
-    <version>2.0.1</version>
+    <version>2.1.0</version>
     <packaging>jar</packaging>
     <name>eventia</name>
     <url>https://github.com/ahmadkhouli2022-cloud/eventia</url>
@@ -87,9 +87,13 @@
 
         </dependency>
       <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-data-jpa</artifactId>
-      <scope>provided</scope>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-jpa</artifactId>
+      </dependency>
+      <!-- Explicit Spring Data commons dependency to ensure repository interfaces compile for consumers of this library -->
+      <dependency>
+        <groupId>org.springframework.data</groupId>
+        <artifactId>spring-data-commons</artifactId>
       </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -104,6 +108,21 @@
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-core</artifactId>
+        </dependency>
+        <!-- Actuator for health checks (optional, provided to consumers when included) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- Explicit actuator implementation to ensure HealthIndicator is available at compile time for the library -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-actuator</artifactId>
+        </dependency>
+        <!-- Ensure Jackson is available at compile time for annotations and databind usage -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
         </dependency>
     </dependencies>
 

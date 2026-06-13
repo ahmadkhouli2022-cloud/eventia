@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Polls and publishes outbox events.
@@ -184,7 +185,17 @@ public class OutboxPublisher implements EventPublisher {
             metricsRecorder.recordDeadLetter();
             logDeadLetterEvent(outboxEvent, reason);
         } else {
-            Instant nextAttemptAt = Instant.now().plusMillis(retryBackoffMillis);
+            // Exponential backoff with jitter
+            int attempts = outboxEvent.getRetryCount() + 1; // upcoming attempt number
+            long baseBackoff;
+            try {
+                baseBackoff = Math.multiplyExact(retryBackoffMillis, 1L << Math.max(0, attempts - 1));
+            } catch (ArithmeticException ae) {
+                baseBackoff = retryBackoffMillis;
+            }
+            long jitter = ThreadLocalRandom.current().nextLong(0, Math.max(1L, baseBackoff / 2));
+            Instant nextAttemptAt = Instant.now().plusMillis(baseBackoff + jitter);
+
             outboxStore.recordFailure(outboxEvent.getId(), reason, nextAttemptAt);
             metricsRecorder.recordPublishFailure();
             log.info("Event {} queued for retry at {}. Attempt {} of {}",
