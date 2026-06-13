@@ -11,7 +11,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import com.codeicator.infrastructure.reactivebus.DomainEventHandler;
 import com.codeicator.infrastructure.reactivebus.annotations.HandleDomainEvent;
-import com.codeicator.messages.DomainEvent;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.codeicator.messages.Event;
 import lombok.Getter;
@@ -55,7 +54,7 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         private transient long version = 0;
 
         @JsonIgnore
-        public final void raiseDomainEvent(DomainEvent event) {
+        public final void raiseDomainEvent(Event event) {
             Objects.requireNonNull(event, "DomainEvent cannot be null");
             try {
                 lock.lock();

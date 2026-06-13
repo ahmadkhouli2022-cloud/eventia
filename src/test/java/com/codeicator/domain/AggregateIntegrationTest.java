@@ -2,7 +2,7 @@ package com.codeicator.domain;
 
 import com.codeicator.infrastructure.reactivebus.DomainEventHandler;
 import com.codeicator.infrastructure.reactivebus.annotations.HandleDomainEvent;
-import com.codeicator.messages.DomainEvent;
+import com.codeicator.messages.Event;
 import lombok.experimental.SuperBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class AggregateIntegrationTest {
     }
 
     @SuperBuilder(toBuilder = true)
-    private static class TestEvent extends DomainEvent {
+    private static class TestEvent extends Event {
     }
 
     private static class TestDomain extends Aggregate.Domain {
