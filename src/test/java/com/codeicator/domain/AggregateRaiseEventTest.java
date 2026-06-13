@@ -36,11 +36,13 @@ class AggregateRaiseEventTest {
     @Test
     void raiseEvent_usingToBuilder_shouldAttachRebuiltEvent() throws Exception {
         TestDomain domain = new TestDomain();
-        setDomainId(domain, UUID.randomUUID());
+        UUID id = UUID.randomUUID();
+        setDomainId(domain, id);
 
+        // Build the event with correct metadata (now the aggregate validates instead of overriding)
         TestEventWithToBuilder e = TestEventWithToBuilder.builder()
-            .streamId("original-stream")
-            .streamType("original-type")
+            .streamId(String.valueOf(id))
+            .streamType(domain.getClass().getName())
             .correlationId("corr")
             .orderId(1)
             .build();
@@ -51,22 +53,23 @@ class AggregateRaiseEventTest {
         assertEquals(1, events.size());
         Event attached = events.get(0);
         assertNotNull(attached.getId());
-        // streamType should be overwritten with the domain class name
+        // streamType should match the provided domain class name
         assertEquals(domain.getClass().getName(), attached.getStreamType());
-        // when built, event.version equals pre-increment domain.version (0), then domain.version becomes 1
-        assertEquals(0L, attached.getVersion());
+        // event.version defaults to 1 (no overwrite), domain version increments to 1
+        assertEquals(1L, attached.getVersion());
         assertEquals(1L, domain.getVersion());
-        assertEquals(String.valueOf(getDomainId(domain)), attached.getStreamId());
+        assertEquals(String.valueOf(id), attached.getStreamId());
     }
 
     @Test
     void raiseEvent_noToBuilder_fallbackToStaticBuilder_shouldAttachRebuiltEvent() throws Exception {
         TestDomain domain = new TestDomain();
-        setDomainId(domain, UUID.randomUUID());
+        UUID id = UUID.randomUUID();
+        setDomainId(domain, id);
 
         TestEventNoToBuilder e = TestEventNoToBuilder.builder()
-            .streamId("original-stream")
-            .streamType("original-type")
+            .streamId(String.valueOf(id))
+            .streamType(domain.getClass().getName())
             .correlationId("corr")
             .orderId(2)
             .build();
@@ -86,9 +89,37 @@ class AggregateRaiseEventTest {
         Event attached = events.get(0);
         assertNotNull(attached.getId());
         assertEquals(domain.getClass().getName(), attached.getStreamType());
-        assertEquals(0L, attached.getVersion());
+        assertEquals(1L, attached.getVersion());
         assertEquals(1L, domain.getVersion());
-        assertEquals(String.valueOf(getDomainId(domain)), attached.getStreamId());
+        assertEquals(String.valueOf(id), attached.getStreamId());
+    }
+
+    @Test
+    void raiseEvent_invalidStreamType_shouldBeRejected() throws Exception {
+        TestDomain domain = new TestDomain();
+        UUID id = UUID.randomUUID();
+        setDomainId(domain, id);
+
+        TestEventWithToBuilder e = TestEventWithToBuilder.builder()
+            .streamId(String.valueOf(id))
+            .streamType("some.other.Type")
+            .build();
+
+        assertThrows(IllegalArgumentException.class, () -> domain.raiseDomainEvent(e));
+    }
+
+    @Test
+    void raiseEvent_invalidStreamId_shouldBeRejected() throws Exception {
+        TestDomain domain = new TestDomain();
+        UUID id = UUID.randomUUID();
+        setDomainId(domain, id);
+
+        TestEventWithToBuilder e = TestEventWithToBuilder.builder()
+            .streamId("wrong-id")
+            .streamType(domain.getClass().getName())
+            .build();
+
+        assertThrows(IllegalArgumentException.class, () -> domain.raiseDomainEvent(e));
     }
 
     private UUID getDomainId(Aggregate.Domain domain) throws Exception {
