@@ -29,6 +29,7 @@
     <developerConnection>scm:git:ssh://github.com/ahmadkhouli2022-cloud/eventia.git</developerConnection>
     <url>https://github.com/ahmadkhouli2022-cloud/eventia</url>
   </scm>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
@@ -138,17 +139,12 @@
                 </configuration>
             </plugin>
 
-          <!-- Sources JAR -->
+          <!-- Sources JAR: produce via CLI (source:jar) to avoid duplicate attachment -->
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-source-plugin</artifactId>
             <version>3.3.0</version>
-            <executions>
-              <execution>
-                <id>attach-sources</id>
-                <goals><goal>jar-no-fork</goal></goals>
-              </execution>
-            </executions>
+            <!-- no executions here to avoid duplicate attachment -->
           </plugin>
 
           <!-- Javadoc JAR -->
@@ -160,12 +156,7 @@
               <failOnError>false</failOnError>
               <doclint>none</doclint>
             </configuration>
-            <executions>
-              <execution>
-                <id>attach-javadocs</id>
-                <goals><goal>jar</goal></goals>
-              </execution>
-            </executions>
+            <!-- no executions here: we will call javadoc:jar explicitly from CLI -->
           </plugin>
 
           <!-- GPG Signing -->
