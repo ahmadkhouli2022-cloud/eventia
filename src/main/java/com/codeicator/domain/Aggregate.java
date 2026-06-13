@@ -131,7 +131,12 @@ public abstract class Aggregate<T extends Aggregate.Domain,IDType> {
                 domainEvents.add(event);
                 this.version++;
 
+            } catch (RuntimeException e) {
+                // Let runtime exceptions (e.g. IllegalArgumentException, IllegalStateException)
+                // propagate directly so callers/tests can assert on them.
+                throw e;
             } catch (Exception e) {
+                // Wrap checked/reflective exceptions to avoid leaking implementation details
                 throw new RuntimeException(e);
             } finally {
                 lock.unlock();
