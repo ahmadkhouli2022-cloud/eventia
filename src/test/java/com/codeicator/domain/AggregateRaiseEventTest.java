@@ -1,6 +1,7 @@
 package com.codeicator.domain;
 
 import com.codeicator.messages.Event;
+import jakarta.persistence.Id;
 import lombok.extern.jackson.Jacksonized;
 import lombok.experimental.SuperBuilder;
 import org.junit.jupiter.api.Test;
@@ -24,21 +25,15 @@ class AggregateRaiseEventTest {
     }
 
     private static class TestDomain extends Aggregate.Domain {
-        // empty - use reflection to set id/version if needed
-    }
-
-    private void setDomainId(Aggregate.Domain domain, UUID id) throws Exception {
-        Field f = Aggregate.Domain.class.getDeclaredField("id");
-        f.setAccessible(true);
-        f.set(domain, id);
+        @Id
+        private UUID id;
     }
 
     @Test
     void raiseEvent_usingToBuilder_shouldAttachRebuiltEvent() throws Exception {
         TestDomain domain = new TestDomain();
         UUID id = UUID.randomUUID();
-        setDomainId(domain, id);
-
+       domain.id=id;
         // Build the event with correct metadata (now the aggregate validates instead of overriding)
         TestEventWithToBuilder e = TestEventWithToBuilder.builder()
             .streamId(String.valueOf(id))
@@ -65,7 +60,7 @@ class AggregateRaiseEventTest {
     void raiseEvent_noToBuilder_fallbackToStaticBuilder_shouldAttachRebuiltEvent() throws Exception {
         TestDomain domain = new TestDomain();
         UUID id = UUID.randomUUID();
-        setDomainId(domain, id);
+        domain.id = id;
 
         TestEventNoToBuilder e = TestEventNoToBuilder.builder()
             .streamId(String.valueOf(id))
@@ -98,7 +93,7 @@ class AggregateRaiseEventTest {
     void raiseEvent_invalidStreamType_shouldBeRejected() throws Exception {
         TestDomain domain = new TestDomain();
         UUID id = UUID.randomUUID();
-        setDomainId(domain, id);
+        domain.id = id;
 
         TestEventWithToBuilder e = TestEventWithToBuilder.builder()
             .streamId(String.valueOf(id))
@@ -112,7 +107,7 @@ class AggregateRaiseEventTest {
     void raiseEvent_invalidStreamId_shouldBeRejected() throws Exception {
         TestDomain domain = new TestDomain();
         UUID id = UUID.randomUUID();
-        setDomainId(domain, id);
+        domain.id = id;
 
         TestEventWithToBuilder e = TestEventWithToBuilder.builder()
             .streamId("wrong-id")

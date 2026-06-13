@@ -1,6 +1,7 @@
 package com.codeicator.domain;
 
 import com.codeicator.messages.Event;
+import jakarta.persistence.Id;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.UUID;
@@ -18,13 +19,15 @@ class AggregateDomainTest {
     }
 
     private static class TestDomain extends Aggregate.Domain {
+            @Id
+            private UUID id;
     }
 
     @Test
     void raiseDomainEventTracksVersionAndUncommittedEvents() {
         TestDomain domain = new TestDomain();
         UUID id = UUID.randomUUID();
-        ReflectionTestUtils.setField(domain, "id", id);
+      domain.id=id;
         TestEvent event = TestEvent.builder()
             .streamId(String.valueOf(id))
             .streamType(domain.getClass().getName())

@@ -1,5 +1,6 @@
 package com.codeicator.domain;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,7 +24,7 @@ import org.springframework.aop.support.AopUtils;
 import org.springframework.util.ReflectionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-public abstract class Aggregate<T extends Aggregate.Domain> {
+public abstract class Aggregate<T extends Aggregate.Domain,IDType> {
     private static final Logger log = LoggerFactory.getLogger(Aggregate.class);
 
     @Getter    protected final DataPersistent<T> dataPersistent;
@@ -53,12 +54,36 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         this.transactionTemplate = tx;
     }
 
+    private static Object getIDFieldValue(Object instance) throws Exception {
+        // 1. Get the field from the class definition
+        Class<?> clazz = instance.getClass();
+        Field field = clazz.getDeclaredField("id");
 
+        // 2. Bypass private modifier checks
+        field.setAccessible(true);
+
+        // 3. Extract and return the value from the specific instance
+        var id = field.get(instance);
+        if (id == null) {
+            throw new IllegalStateException("Domain id field is null");
+        }
+
+        // We cannot use `instanceof` with the generic type parameter IDType because
+        // of type erasure. Instead check the runtime type against the declared
+        // field type and then perform an unchecked cast.
+        Class<?> declared = field.getType();
+        if (!declared.isAssignableFrom(id.getClass())) {
+            throw new IllegalStateException(String.format(
+                "Domain id field is not of expected type. Declared=%s, Actual=%s",
+                declared.getName(), id.getClass().getName()));
+        }
+
+        return id;
+    }
     @SuperBuilder(toBuilder = true)
     @NoArgsConstructor
     public abstract static class Domain {
 
-        private UUID id;
         @JsonIgnore
         private final transient Lock lock=new ReentrantLock();
 
@@ -86,13 +111,13 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
                         "Event streamType '%s' is not compatible with domain '%s'",
                         evStreamType, expectedStreamType));
                 }
-
-                if (this.id == null) {
+                var id = getIDFieldValue(this);
+                if (id == null) {
                     throw new IllegalStateException("Domain id is not set; cannot validate event streamId");
                 }
 
                 String evStreamId = event.getStreamId();
-                String expectedStreamId = String.valueOf(this.id);
+                String expectedStreamId = String.valueOf(id);
                 if (evStreamId == null || !evStreamId.equals(expectedStreamId)) {
                     throw new IllegalArgumentException(String.format(
                         "Event streamId '%s' is not compatible with domain id '%s'",
@@ -106,10 +131,13 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
                 domainEvents.add(event);
                 this.version++;
 
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             } finally {
                 lock.unlock();
             }
         }
+
 
         @JsonIgnore
         public final long getVersion() {

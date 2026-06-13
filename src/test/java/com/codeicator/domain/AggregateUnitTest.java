@@ -3,6 +3,7 @@ package com.codeicator.domain;
 import com.codeicator.infrastructure.reactivebus.DomainEventHandler;
 import com.codeicator.infrastructure.reactivebus.annotations.HandleDomainEvent;
 import com.codeicator.messages.Event;
+import jakarta.persistence.Id;
 import lombok.experimental.SuperBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,9 +27,11 @@ class AggregateUnitTest {
     }
 
     private static class TestDomain extends Aggregate.Domain {
+        @Id
+        private UUID id;
     }
 
-    private static class TestAggregate extends Aggregate<TestDomain> {
+    private static class TestAggregate extends Aggregate<TestDomain, UUID> {
         TestAggregate(DataPersistent<TestDomain> persistent, ApplicationContext context) {
             super(persistent, context);
         }
