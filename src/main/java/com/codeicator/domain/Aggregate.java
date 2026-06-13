@@ -76,17 +76,98 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
             Objects.requireNonNull(event, "DomainEvent cannot be null");
             try {
                 lock.lock();
-                Object builder = event.getClass().getMethod("toBuilder").invoke(event);
-                builder.getClass().getMethod("streamType", String.class)
-                    .invoke(builder, this.getClass().getName());
-                builder.getClass().getMethod("version", long.class)
-                    .invoke(builder, this.version);
-                builder.getClass().getMethod("streamId", String.class)
-                    .invoke(builder, String.valueOf(this.id));
-                Event builtEvent = (Event) builder.getClass().getMethod("build").invoke(builder);
-                domainEvents.add(builtEvent);
-                this.version++;
-            } catch (ReflectiveOperationException e) {
+                // Primary path: use Lombok-generated toBuilder() when available
+                try {
+                    Object builder = event.getClass().getMethod("toBuilder").invoke(event);
+                    builder.getClass().getMethod("streamType", String.class)
+                        .invoke(builder, this.getClass().getName());
+                    builder.getClass().getMethod("version", long.class)
+                        .invoke(builder, this.version);
+                    builder.getClass().getMethod("streamId", String.class)
+                        .invoke(builder, String.valueOf(this.id));
+                    Event builtEvent = (Event) builder.getClass().getMethod("build").invoke(builder);
+                    domainEvents.add(builtEvent);
+                    this.version++;
+                } catch (ReflectiveOperationException primaryEx) {
+                    // Fallback strategies: try static builder() then copy properties where possible.
+                    log.warn("toBuilder() unavailable or failed for event {} — attempting fallback builder strategy: {}",
+                        event.getClass().getName(), primaryEx.toString());
+                    boolean added = false;
+                    try {
+                        // Try static builder() on the event class
+                        java.lang.reflect.Method staticBuilder = event.getClass().getMethod("builder");
+                        Object builder = staticBuilder.invoke(null);
+
+                        // Helper: copy common properties from event getters to builder methods if available
+                        String[] props = new String[]{"id", "raisedAt", "streamId", "streamType", "correlationId", "orderId", "version", "schemaVersion", "category"};
+                        for (String prop : props) {
+                            try {
+                                // build getter name
+                                String getter = "get" + Character.toUpperCase(prop.charAt(0)) + prop.substring(1);
+                                java.lang.reflect.Method g = null;
+                                try { g = event.getClass().getMethod(getter); } catch (NoSuchMethodException ignore) { }
+                                if (g == null) {
+                                    // try boolean-style isX
+                                    try { g = event.getClass().getMethod("is" + Character.toUpperCase(prop.charAt(0)) + prop.substring(1)); } catch (NoSuchMethodException ignore) { }
+                                }
+                                Object val = null;
+                                if (g != null) {
+                                    val = g.invoke(event);
+                                }
+
+                                // find builder setter method with same name
+                                java.lang.reflect.Method setter = findBuilderSetter(builder.getClass(), prop, val);
+                                if (setter != null) {
+                                    // if val is null and setter parameter is primitive, skip
+                                    Class<?> param = setter.getParameterTypes()[0];
+                                    if (val == null && param.isPrimitive()) {
+                                        // skip
+                                    } else {
+                                        setter.invoke(builder, val);
+                                    }
+                                }
+                            } catch (Exception ignored) {
+                                // ignore individual property copy failures
+                            }
+                        }
+
+                        // Ensure streamType/streamId/version are set to the domain context
+                        try {
+                            java.lang.reflect.Method m = builder.getClass().getMethod("streamType", String.class);
+                            m.invoke(builder, this.getClass().getName());
+                        } catch (Exception ignored) { }
+                        try {
+                            java.lang.reflect.Method m2 = builder.getClass().getMethod("version", long.class);
+                            m2.invoke(builder, this.version);
+                        } catch (Exception ignored) { }
+                        try {
+                            java.lang.reflect.Method m3 = builder.getClass().getMethod("streamId", String.class);
+                            m3.invoke(builder, String.valueOf(this.id));
+                        } catch (Exception ignored) { }
+
+                        // Finally build if possible
+                        try {
+                            Event builtEvent = (Event) builder.getClass().getMethod("build").invoke(builder);
+                            domainEvents.add(builtEvent);
+                            this.version++;
+                            added = true;
+                        } catch (Exception e2) {
+                            log.warn("Fallback build failed for event {}: {}", event.getClass().getName(), e2.toString());
+                        }
+                    } catch (ReflectiveOperationException fallbackEx) {
+                        log.warn("Static builder() not available for event {}: {}", event.getClass().getName(), fallbackEx.toString());
+                    }
+
+                    if (!added) {
+                        // Last resort: add the original event instance (unable to set stream metadata)
+                        log.warn("Adding original event instance without rebuilding — stream metadata may be missing: {}", event.getClass().getName());
+                        domainEvents.add(event);
+                        this.version++;
+                    }
+                }
+            } catch (Exception e) {
+                // This should not be reached because primary/fallback exceptions are handled above,
+                // but keep defensive behavior to avoid swallowing errors.
                 throw new IllegalStateException("Failed to rebuild domain event from builder", e);
             } finally {
                 lock.unlock();
@@ -142,6 +223,42 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         @JsonIgnore
         protected final Lock getLock() {
             return lock;
+        }
+
+        /**
+         * Find a builder setter method by property name that can accept the provided value.
+         * Returns null if none found.
+         */
+        private static java.lang.reflect.Method findBuilderSetter(Class<?> builderClass, String propName, Object value) {
+            for (java.lang.reflect.Method m : builderClass.getMethods()) {
+                if (!m.getName().equals(propName) || m.getParameterCount() != 1) continue;
+                Class<?> param = m.getParameterTypes()[0];
+                if (value == null) {
+                    if (!param.isPrimitive()) return m; // accept reference types for null
+                    else continue; // cannot pass null to primitive
+                }
+                Class<?> valClass = value.getClass();
+                if (param.isPrimitive()) {
+                    // map primitives to wrappers
+                    Class<?> wrapper = primitiveToWrapper(param);
+                    if (wrapper.isAssignableFrom(valClass)) return m;
+                } else {
+                    if (param.isAssignableFrom(valClass)) return m;
+                }
+            }
+            return null;
+        }
+
+        private static Class<?> primitiveToWrapper(Class<?> primitive) {
+            if (primitive == int.class) return Integer.class;
+            if (primitive == long.class) return Long.class;
+            if (primitive == boolean.class) return Boolean.class;
+            if (primitive == byte.class) return Byte.class;
+            if (primitive == char.class) return Character.class;
+            if (primitive == float.class) return Float.class;
+            if (primitive == double.class) return Double.class;
+            if (primitive == short.class) return Short.class;
+            return primitive;
         }
 
 
