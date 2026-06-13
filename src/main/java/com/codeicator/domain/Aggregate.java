@@ -272,13 +272,29 @@ public abstract class Aggregate<T extends Aggregate.Domain,IDType> {
                 }
                 ReflectionUtils.makeAccessible(method);
 
-                Consumer<Object> func = message -> {
-                    try {
-                        method.invoke(handlerInstance, message);
-                    } catch (Exception e) {
-                        log.error("Error invoking handler {}.{}", targetClass.getName(), method.getName(), e);
+                // Only support zero-arg factory methods that return a Consumer<T>.
+                // Example supported shape:
+                //   @HandleDomainEvent(messageType = FooEvent.class)
+                //   public Consumer<FooEvent> topUpTransactionFailedEventHandler1() { ... }
+                Consumer<Object> func;
+                try {
+                    if (method.getParameterCount() != 0 || !java.util.function.Consumer.class.isAssignableFrom(method.getReturnType())) {
+                        log.warn("Skipping handler method {}.{}: only zero-arg Consumer<T> factory methods are supported", targetClass.getName(), method.getName());
+                        continue;
                     }
-                };
+
+                    Object returned = method.invoke(handlerInstance);
+                    if (returned == null) {
+                        log.warn("Handler factory method {}.{} returned null - skipping", targetClass.getName(), method.getName());
+                        continue;
+                    }
+                    @SuppressWarnings("unchecked")
+                    Consumer<Object> provided = (Consumer<Object>) returned;
+                    func = provided;
+                } catch (Exception e) {
+                    log.error("Error registering handler {}.{}: {}", targetClass.getName(), method.getName(), e.toString());
+                    continue;
+                }
 
                 var messageHandler = new DomainEventHandler(func, annotation.messageType());
 
@@ -312,7 +328,7 @@ public abstract class Aggregate<T extends Aggregate.Domain,IDType> {
             log.debug("Successfully persist domain {} domain events", updatedDomain);
 
             for (Event msg : domain.getUncommittedEvents()) {
-                var handlers = this.getHandlersMap().get(msg.getType());
+                var handlers = getHandlersMap().get(msg.getType());
                 if (handlers != null) {
                     handlers.forEach(handler -> {
                         try {

@@ -58,8 +58,8 @@ class AggregateIntegrationTest {
         private final AtomicInteger count = new AtomicInteger(0);
 
         @HandleDomainEvent(messageType = TestEvent.class)
-        public void handle(TestEvent event) {
-            count.incrementAndGet();
+        public java.util.function.Consumer<TestEvent> topUpTransactionFailedEventHandler1() {
+            return event -> count.incrementAndGet();
         }
     }
 
