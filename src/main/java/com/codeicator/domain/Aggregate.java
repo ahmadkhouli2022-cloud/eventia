@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import com.codeicator.infrastructure.reactivebus.DomainEventHandler;
 import com.codeicator.infrastructure.reactivebus.annotations.HandleDomainEvent;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -19,7 +20,8 @@ import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.util.ReflectionUtils;
 import reactor.core.publisher.Mono;
@@ -36,6 +38,22 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         this.dataPersistent = Objects.requireNonNull(persistent,
             "DataPersistent cannot be null");
         this.context = context;
+        // Initialize TransactionTemplate if possible. Keep it optional to remain
+        // usable in lightweight test contexts without a transaction manager.
+        TransactionTemplate tx = null;
+        try {
+            tx = context.getBean(TransactionTemplate.class);
+        } catch (Exception e) {
+            try {
+                PlatformTransactionManager ptm = context.getBean(PlatformTransactionManager.class);
+                if (ptm != null) {
+                    tx = new TransactionTemplate(ptm);
+                }
+            } catch (Exception ignored) {
+                // no transaction support in context
+            }
+        }
+        this.transactionTemplate = tx;
     }
 
 
@@ -146,6 +164,10 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
     @Getter
     protected final ApplicationContext context;
 
+    // Optional TransactionTemplate used to ensure aggregate operations run inside a
+    // transactional boundary even when invoked from non-transactional callers.
+    protected final TransactionTemplate transactionTemplate;
+
     @Getter
     protected static final ConcurrentHashMap<String,List<DomainEventHandler>> handlersMap=new ConcurrentHashMap<>();
 
@@ -185,17 +207,28 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
     }
 
 
-    @Transactional
     public final T aggregate(T domain) {
         Objects.requireNonNull(domain, "Domain cannot be null");
         ensureHandlersInitialized();
+        return runInTransaction(() -> doAggregate(domain));
+    }
+
+    public final Mono<T> reactiveAggregate(T domain) {
+        Objects.requireNonNull(domain, "Domain cannot be null");
+        ensureHandlersInitialized();
+        return Mono.fromSupplier(() -> runInTransaction(() -> doAggregate(domain)))
+            .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    // Core aggregate logic extracted to be callable inside or outside a transaction
+    private T doAggregate(T domain) {
         T updatedDomain;
         try {
             domain.getLock().lock();
 
             // Just persist - outbox pattern handles event publishing
             updatedDomain = this.getDataPersistent().persist(domain);
-            log.debug("Successfully persist domain {} domain events",updatedDomain);
+            log.debug("Successfully persist domain {} domain events", updatedDomain);
 
             for (Event msg : domain.getUncommittedEvents()) {
                 var handlers = this.getHandlersMap().get(msg.getType());
@@ -212,7 +245,6 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
                 }
             }
 
-
             log.debug("Successfully handle {} domain events",
                 domain.getUncommittedEvents().size());
 
@@ -226,40 +258,11 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         return Objects.requireNonNull(updatedDomain);
     }
 
-    @Transactional
-    public final Mono<T> reactiveAggregate(T domain) {
-        return Mono.fromSupplier(() -> {
-            Objects.requireNonNull(domain, "Domain cannot be null");
-            ensureHandlersInitialized();
-
-            T updatedDomain;
-            try {
-                domain.getLock().lock();
-                updatedDomain = this.getDataPersistent().persist(domain);
-
-                for (Event msg : domain.getUncommittedEvents()) {
-                    var handlers = this.getHandlersMap().get(msg.getType());
-                    if (handlers != null) {
-                        handlers.forEach(handler -> {
-                            try {
-                                log.debug("Processing message of type {} with handler {}", msg.getType(), handler);
-                                handler.Processor().accept(msg);
-
-                            } catch (Exception e) {
-                                log.error("Error logging: handler " + handler.getClass() + " message processing", e);
-                            }
-                        });
-                    }
-                }
-                domain.markEventsAsCommitted();
-
-            } finally {
-                domain.getLock().unlock();
-            }
-
-
-            return Objects.requireNonNull(updatedDomain);
-        }).subscribeOn(Schedulers.boundedElastic());
+    private T runInTransaction(Supplier<T> supplier) {
+        if (this.transactionTemplate != null) {
+            return this.transactionTemplate.execute(status -> supplier.get());
+        }
+        return supplier.get();
     }
 
 
