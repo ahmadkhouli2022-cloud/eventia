@@ -478,7 +478,7 @@ Eventia is inspired by:
 ---
 
 <p align="center">
-  <b>Built with ❤️ by the Codeicator team</b><br>
+  <b>Built by Ahmad Alkhouli</b><br>
   <a href="https://codeicator.com/eventia">Website</a> •
   <a href="https://codeicator.com/eventia/docs">Documentation</a> •
   <a href="https://github.com/codeicator/eventia/discussions">Discussions</a>
