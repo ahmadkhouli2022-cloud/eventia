@@ -3,7 +3,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-- Initial Phase 0 hygiene items: credential handling, tests, and docs.
+
+## [2.1.7] - 2026-06-14
+- Fix `@HandleDomainEvent` discovery on `@Configuration` `@Bean` factory methods.
+- Fix `AggregateIntegrationTest` Spring Cloud Stream binding and test isolation.
 
 ## [2.0.1] - 2026-05-02
 - Fix domain event handler discovery and invocation.
