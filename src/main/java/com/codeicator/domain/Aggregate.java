@@ -1,10 +1,7 @@
 package com.codeicator.domain;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -76,99 +73,43 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
             Objects.requireNonNull(event, "DomainEvent cannot be null");
             try {
                 lock.lock();
-                // Primary path: use Lombok-generated toBuilder() when available
-                try {
-                    Object builder = event.getClass().getMethod("toBuilder").invoke(event);
-                    builder.getClass().getMethod("streamType", String.class)
-                        .invoke(builder, this.getClass().getName());
-                    builder.getClass().getMethod("version", long.class)
-                        .invoke(builder, this.version);
-                    builder.getClass().getMethod("streamId", String.class)
-                        .invoke(builder, String.valueOf(this.id));
-                    Event builtEvent = (Event) builder.getClass().getMethod("build").invoke(builder);
-                    domainEvents.add(builtEvent);
-                    this.version++;
-                } catch (ReflectiveOperationException primaryEx) {
-                    // Fallback strategies: try static builder() then copy properties where possible.
-                    log.warn("toBuilder() unavailable or failed for event {} — attempting fallback builder strategy: {}",
-                        event.getClass().getName(), primaryEx.toString());
-                    boolean added = false;
-                    try {
-                        // Try static builder() on the event class
-                        java.lang.reflect.Method staticBuilder = event.getClass().getMethod("builder");
-                        Object builder = staticBuilder.invoke(null);
 
-                        // Helper: copy common properties from event getters to builder methods if available
-                        String[] props = new String[]{"id", "raisedAt", "streamId", "streamType", "correlationId", "orderId", "version", "schemaVersion", "category"};
-                        for (String prop : props) {
-                            try {
-                                // build getter name
-                                String getter = "get" + Character.toUpperCase(prop.charAt(0)) + prop.substring(1);
-                                java.lang.reflect.Method g = null;
-                                try { g = event.getClass().getMethod(getter); } catch (NoSuchMethodException ignore) { }
-                                if (g == null) {
-                                    // try boolean-style isX
-                                    try { g = event.getClass().getMethod("is" + Character.toUpperCase(prop.charAt(0)) + prop.substring(1)); } catch (NoSuchMethodException ignore) { }
-                                }
-                                Object val = null;
-                                if (g != null) {
-                                    val = g.invoke(event);
-                                }
-
-                                // find builder setter method with same name
-                                java.lang.reflect.Method setter = findBuilderSetter(builder.getClass(), prop, val);
-                                if (setter != null) {
-                                    // if val is null and setter parameter is primitive, skip
-                                    Class<?> param = setter.getParameterTypes()[0];
-                                    if (val == null && param.isPrimitive()) {
-                                        // skip
-                                    } else {
-                                        setter.invoke(builder, val);
-                                    }
-                                }
-                            } catch (Exception ignored) {
-                                // ignore individual property copy failures
-                            }
-                        }
-
-                        // Ensure streamType/streamId/version are set to the domain context
-                        try {
-                            java.lang.reflect.Method m = builder.getClass().getMethod("streamType", String.class);
-                            m.invoke(builder, this.getClass().getName());
-                        } catch (Exception ignored) { }
-                        try {
-                            java.lang.reflect.Method m2 = builder.getClass().getMethod("version", long.class);
-                            m2.invoke(builder, this.version);
-                        } catch (Exception ignored) { }
-                        try {
-                            java.lang.reflect.Method m3 = builder.getClass().getMethod("streamId", String.class);
-                            m3.invoke(builder, String.valueOf(this.id));
-                        } catch (Exception ignored) { }
-
-                        // Finally build if possible
-                        try {
-                            Event builtEvent = (Event) builder.getClass().getMethod("build").invoke(builder);
-                            domainEvents.add(builtEvent);
-                            this.version++;
-                            added = true;
-                        } catch (Exception e2) {
-                            log.warn("Fallback build failed for event {}: {}", event.getClass().getName(), e2.toString());
-                        }
-                    } catch (ReflectiveOperationException fallbackEx) {
-                        log.warn("Static builder() not available for event {}: {}", event.getClass().getName(), fallbackEx.toString());
-                    }
-
-                    if (!added) {
-                        // Last resort: add the original event instance (unable to set stream metadata)
-                        log.warn("Adding original event instance without rebuilding — stream metadata may be missing: {}", event.getClass().getName());
-                        domainEvents.add(event);
-                        this.version++;
-                    }
+                // Validate event metadata instead of overriding it.
+                // Rules:
+                //  - streamType must exactly match the domain class name
+                //  - streamId must equal the domain id (stringified)
+                //  - version must match the current domain version
+                String expectedStreamType = this.getClass().getName();
+                String evStreamType = event.getStreamType();
+                if (evStreamType == null || !evStreamType.equals(expectedStreamType)) {
+                    throw new IllegalArgumentException(String.format(
+                        "Event streamType '%s' is not compatible with domain '%s'",
+                        evStreamType, expectedStreamType));
                 }
-            } catch (Exception e) {
-                // This should not be reached because primary/fallback exceptions are handled above,
-                // but keep defensive behavior to avoid swallowing errors.
-                throw new IllegalStateException("Failed to rebuild domain event from builder", e);
+
+                if (this.id == null) {
+                    throw new IllegalStateException("Domain id is not set; cannot validate event streamId");
+                }
+
+                String evStreamId = event.getStreamId();
+                String expectedStreamId = String.valueOf(this.id);
+                if (evStreamId == null || !evStreamId.equals(expectedStreamId)) {
+                    throw new IllegalArgumentException(String.format(
+                        "Event streamId '%s' is not compatible with domain id '%s'",
+                        evStreamId, expectedStreamId));
+                }
+
+                long evVersion = event.getVersion();
+                if (evVersion != this.version) {
+                    throw new IllegalArgumentException(String.format(
+                        "Event version '%d' is not compatible with domain version '%d'",
+                        evVersion, this.version));
+                }
+
+                // If validation passed, accept the event instance as-is (no metadata overriding).
+                domainEvents.add(event);
+                this.version++;
+
             } finally {
                 lock.unlock();
             }
@@ -323,7 +264,6 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
         }
     }
 
-
     public final T aggregate(T domain) {
         Objects.requireNonNull(domain, "Domain cannot be null");
         ensureHandlersInitialized();
@@ -405,7 +345,6 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
 //            })
 //            .then();
 //    }
-
 
 
 
