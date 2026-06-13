@@ -82,7 +82,7 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
                 builder.getClass().getMethod("version", long.class)
                     .invoke(builder, this.version);
                 builder.getClass().getMethod("streamId", String.class)
-                    .invoke(builder, this.id.toString());
+                    .invoke(builder, String.valueOf(this.id));
                 Event builtEvent = (Event) builder.getClass().getMethod("build").invoke(builder);
                 domainEvents.add(builtEvent);
                 this.version++;
