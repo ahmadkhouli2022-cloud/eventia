@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.1.9] - 2026-07-07
+- Detect domain id field via `@Id` annotation instead of assuming field name `id`.
+
 ## [2.1.8] - 2026-07-07
 - Remove unused `IDType` generic parameter from `Aggregate`.
 
