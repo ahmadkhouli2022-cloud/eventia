@@ -25,7 +25,7 @@ import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-public abstract class Aggregate<T extends Aggregate.Domain,IDType> {
+public abstract class Aggregate<T extends Aggregate.Domain> {
     private static final Logger log = LoggerFactory.getLogger(Aggregate.class);
 
     @Getter    protected final DataPersistent<T> dataPersistent;
@@ -69,9 +69,9 @@ public abstract class Aggregate<T extends Aggregate.Domain,IDType> {
             throw new IllegalStateException("Domain id field is null");
         }
 
-        // We cannot use `instanceof` with the generic type parameter IDType because
-        // of type erasure. Instead check the runtime type against the declared
-        // field type and then perform an unchecked cast.
+        // We cannot use `instanceof` with a generic type parameter because of
+        // type erasure. Instead check the runtime type against the declared field
+        // type and then perform an unchecked cast.
         Class<?> declared = field.getType();
         if (!declared.isAssignableFrom(id.getClass())) {
             throw new IllegalStateException(String.format(

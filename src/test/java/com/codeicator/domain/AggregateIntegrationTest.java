@@ -72,7 +72,7 @@ class AggregateIntegrationTest {
         private UUID id;
     }
 
-    private static class TestAggregate extends Aggregate<TestDomain,UUID> {
+    private static class TestAggregate extends Aggregate<TestDomain> {
         TestAggregate(DataPersistent<TestDomain> persistent, ApplicationContext context) {
             super(persistent, context);
         }
