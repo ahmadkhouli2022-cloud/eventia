@@ -1,5 +1,6 @@
 package com.codeicator.domain;
 
+import jakarta.persistence.Id;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -56,9 +57,23 @@ public abstract class Aggregate<T extends Aggregate.Domain> {
     }
 
     private static Object getIDFieldValue(Object instance) throws Exception {
-        // 1. Get the field from the class definition
+        // 1. Find the field annotated with @Id in the class hierarchy
         Class<?> clazz = instance.getClass();
-        Field field = clazz.getDeclaredField("id");
+        Field field = null;
+        for (Class<?> current = clazz; current != null && current != Object.class; current = current.getSuperclass()) {
+            for (Field f : current.getDeclaredFields()) {
+                if (f.isAnnotationPresent(Id.class)) {
+                    field = f;
+                    break;
+                }
+            }
+            if (field != null) {
+                break;
+            }
+        }
+        if (field == null) {
+            throw new IllegalStateException("No field annotated with @Id found on domain class " + clazz.getName());
+        }
 
         // 2. Bypass private modifier checks
         field.setAccessible(true);
