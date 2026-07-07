@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.1.8] - 2026-07-07
+- Remove unused `IDType` generic parameter from `Aggregate`.
+
 ## [2.1.7] - 2026-06-14
 - Fix `@HandleDomainEvent` discovery on `@Configuration` `@Bean` factory methods.
 - Fix `AggregateIntegrationTest` Spring Cloud Stream binding and test isolation.
