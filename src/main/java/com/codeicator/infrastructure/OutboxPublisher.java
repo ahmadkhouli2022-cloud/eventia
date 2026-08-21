@@ -146,11 +146,15 @@ public class OutboxPublisher implements EventPublisher {
                 outboxEvent.getId(),
                 outboxEvent.getEventType());
 
-            // ✅ Deserialize event from JSON
-            Event event = outboxEvent.getEvent(objectMapper);
-
-            // Publish to event bus
-            bus.raiseEvent(event);
+            // Raw relay: push the stored JSON payload without deserializing it. The event class
+            // does not need to be on this service's classpath, which is what makes a shared
+            // outbox table (single-database dev deployment) safe — any poller can relay any row.
+            // Rows carry the owning service's topic; rows without one fall back to this
+            // service's own event destination.
+            String topic = outboxEvent.getTopic() != null
+                ? outboxEvent.getTopic()
+                : bus.getEventBusDestination();
+            bus.raiseRawEvent(topic, outboxEvent.getEventType(), outboxEvent.getEventPayload());
 
             // Mark as published in outbox store
             outboxStore.markAsPublished(outboxEvent.getId());
@@ -283,7 +287,7 @@ public class OutboxPublisher implements EventPublisher {
 
     @Override
     public void publish(Event event) throws EventPublishingException {
-        var envelop = OutboxEvent.from(event,objectMapper);
+        var envelop = OutboxEvent.from(event, objectMapper, bus.getEventBusDestination());
         outboxStore.save(envelop);
     }
 }

@@ -89,7 +89,28 @@ class OutboxPublisherIntegrationTest {
         assertNotNull(updated);
         assertNotNull(updated.getPublishedAt());
         assertEquals(0, updated.getRetryCount());
-        verify(bus).raiseEvent(org.mockito.ArgumentMatchers.any(Event.class));
+        // Raw relay: no deserialization on the publish path
+        verify(bus)
+            .raiseRawEvent(
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(TestEvent.class.getName()),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void publishPendingRelaysToTheRowDestination() {
+        UUID eventId = UUID.randomUUID();
+        OutboxEvent event = buildEvent(eventId, Instant.now().minusSeconds(2));
+        event.setTopic("tenant.events");
+        repository.save(event);
+
+        outboxPublisher.publishPending();
+
+        verify(bus)
+            .raiseRawEvent(
+                org.mockito.ArgumentMatchers.eq("tenant.events"),
+                org.mockito.ArgumentMatchers.eq(TestEvent.class.getName()),
+                org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
@@ -100,7 +121,10 @@ class OutboxPublisherIntegrationTest {
 
         doThrow(new RuntimeException("broker down"))
             .when(bus)
-            .raiseEvent(org.mockito.ArgumentMatchers.any(Event.class));
+            .raiseRawEvent(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
 
         Instant before = Instant.now();
         outboxPublisher.publishPending();

@@ -31,7 +31,7 @@ public abstract class Bus<T>{
     protected String eventBusDestination;
     protected final ConcurrentHashMap<String,List<Handler>> handlersMap=new ConcurrentHashMap<>();
     protected final ConcurrentHashMap<UUID,Consumer<Reply<?>>> rpcMap=new ConcurrentHashMap<>();
-    protected ObjectMapper objectMapper;
+    protected ObjectMapper objectMapper = new ObjectMapper();
 
 
     protected void registerHandlers() throws ClassNotFoundException, NoSuchMethodException {
@@ -77,5 +77,28 @@ public abstract class Bus<T>{
     public  abstract Mono<Void> raiseEvent(Mono<Event> event);
     public  abstract Mono<Void> raiseEvent(String destination,Mono<Event> event);
 
+    /** The service's own event destination ({@code bus.event.destination}). */
+    public String getEventBusDestination() {
+        return eventBusDestination;
+    }
+
+    /**
+     * Raises an event from its raw JSON payload without deserializing it locally. Used by the
+     * outbox publisher so a service can publish rows written by other services (shared outbox
+     * table) without having their event classes on the classpath. Consumers still deserialize
+     * selectively via their {@code @Handle} registrations.
+     *
+     * <p>The default implementation deserializes and delegates to {@link #raiseEvent(String,
+     * Event)}; transports that can forward raw payloads (e.g. {@code ReactiveBus}) override it.
+     */
+    @SuppressWarnings("unchecked")
+    public void raiseRawEvent(String topic, String eventType, String payload) {
+        try {
+            Event event = (Event) objectMapper.readValue(payload, Class.forName(eventType));
+            raiseEvent(topic, event);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to deserialize event", e);
+        }
+    }
 
 }

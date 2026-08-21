@@ -166,6 +166,21 @@ public class ReactiveBus extends Bus<org.springframework.messaging.Message<Strin
         stream.send(destination, toSend);
     }
 
+    /**
+     * Publishes the raw JSON payload as-is with the {@code type} and {@code category} headers the
+     * consumer-side mapper dispatches on — no local deserialization, so outbox rows owned by other
+     * services can be relayed without their event classes.
+     */
+    @Override
+    public void raiseRawEvent(String topic, String eventType, String payload){
+        var toSend=MessageBuilder.withPayload(payload)
+                .setHeader("type", eventType)
+                .setHeader("category", "Event")
+                .setHeader("contentType", "application/json")
+                .build();
+        stream.send(topic, toSend);
+    }
+
     public void raiseEvent(Event event){
         this.publish(this.eventBusDestination,event);
     }
