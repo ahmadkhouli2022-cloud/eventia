@@ -63,9 +63,27 @@ public class OutboxEvent implements Serializable {
     private int schemaVersion;
 
     /**
+     * Target topic for the event. Set by the owning service when the row is written,
+     * so any service polling a shared outbox table can publish the raw payload to the correct
+     * destination without deserializing (and without needing the event class on its classpath).
+     * Rows written before this column existed fall back to the polling service's own
+     * {@code bus.event.destination}.
+     */
+    @Column(name = "topic")
+    private String topic;
+
+    /**
      * Factory method to create outbox event from domain event
      */
     public static OutboxEvent from(Event event, ObjectMapper objectMapper) {
+        return from(event, objectMapper, null);
+    }
+
+    /**
+     * Factory method to create outbox event from domain event, stamped with the owning service's
+     * topic.
+     */
+    public static OutboxEvent from(Event event, ObjectMapper objectMapper, String topic) {
         try {
             return OutboxEvent.builder()
                 .id(event.getId())
@@ -75,6 +93,7 @@ public class OutboxEvent implements Serializable {
                 .createdAt(event.getRaisedAt().toInstant())
                 .retryCount(0)
                 .deadLettered(false)
+                .topic(topic)
                 .build();
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize event", e);

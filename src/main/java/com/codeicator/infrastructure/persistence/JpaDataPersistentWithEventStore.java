@@ -19,14 +19,41 @@ public class JpaDataPersistentWithEventStore<T extends Aggregate.Domain>
     private final JpaRepository<T,?> aggregateRepository;
     private final ObjectMapper objectMapper; // ✅ Add ObjectMapper
     private final OutboxStore outboxStore;
+    private final String topic;
 
     public JpaDataPersistentWithEventStore(
         JpaRepository<T,?> aggregateRepository,
         ObjectMapper objectMapper,
         OutboxStore outboxStore) {  // ✅ Inject ObjectMapper
+        this(aggregateRepository, objectMapper, outboxStore, null);
+    }
+
+    /**
+     * @param topic the service's event topic ({@code bus.event.destination}); stamped onto
+     *     every outbox row so any poller of a shared outbox table can relay the raw payload to the
+     *     correct topic without deserializing it
+     */
+    public JpaDataPersistentWithEventStore(
+        JpaRepository<T,?> aggregateRepository,
+        ObjectMapper objectMapper,
+        OutboxStore outboxStore,
+        String topic) {
         this.aggregateRepository = Objects.requireNonNull(aggregateRepository);
         this.objectMapper = Objects.requireNonNull(objectMapper);
         this.outboxStore = Objects.requireNonNull(outboxStore);
+        this.topic = topic;
+    }
+
+    /**
+     * Outbox topic for an event: the configured {@code topic} when set, otherwise derived from the
+     * aggregate and event simple class names — {@code <Aggregate>.<Event>} (e.g. {@code
+     * Tenant.TenantCreatedEvent}).
+     */
+    private String resolveTopic(T domain, Event event) {
+        if (topic != null) {
+            return topic;
+        }
+        return domain.getClass().getSimpleName() + "." + event.getClass().getSimpleName();
     }
 
     @Override
@@ -52,7 +79,7 @@ public class JpaDataPersistentWithEventStore<T extends Aggregate.Domain>
 
             if (!uncommittedEvents.isEmpty()) {
                 List<OutboxEvent> outboxEvents = uncommittedEvents.stream()
-                    .map(event -> OutboxEvent.from(event, objectMapper)) // ✅ Pass ObjectMapper
+                    .map(event -> OutboxEvent.from(event, objectMapper, resolveTopic(domain, event)))
                     .collect(Collectors.toList());
 
                 outboxStore.saveAll(outboxEvents);
